@@ -215,8 +215,11 @@ class ESP32Controller:
             return True
         
         try:
+            # Convert to serpentine pattern for LED strips
+            serpentine_buffer = self._convert_to_serpentine(matrix)
+            
             # Flatten RGB data
-            frame_data = matrix.buffer.flatten().tobytes()
+            frame_data = serpentine_buffer.flatten().tobytes()
             
             # Send frame with protocol
             command = b"FRAME:" + frame_data + b":END"
@@ -284,6 +287,21 @@ class ESP32Controller:
                     row += "  "
             print(row)
         print("="*40)
+    
+    def _convert_to_serpentine(self, matrix: LEDMatrix):
+        """Convert matrix buffer to serpentine pattern for LED strips"""
+        import numpy as np
+        serpentine_buffer = np.zeros_like(matrix.buffer)
+        
+        for y in range(matrix.height):
+            if y % 2 == 0:
+                # Even rows: left to right (normal)
+                serpentine_buffer[y] = matrix.buffer[y]
+            else:
+                # Odd rows: right to left (reversed)
+                serpentine_buffer[y] = matrix.buffer[y][::-1]
+        
+        return serpentine_buffer
 
 
 class ScrollingText:
