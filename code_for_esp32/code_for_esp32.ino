@@ -21,11 +21,11 @@
 #define TEXT_COLOR CRGB::Red // Text color
 
 // WiFi Configuration
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "Burke-wifi";
+const char* password = "Bradbellette1234";
 
 // Web Server Configuration
-const char* serverURL = "https://your-vercel-app.vercel.app/api/message";
+const char* serverURL = "https://esp32-matrix.vercel.app/api/message";
 #define UPDATE_INTERVAL 30000  // Update message every 30 seconds
 
 CRGB leds[NUM_LEDS];
