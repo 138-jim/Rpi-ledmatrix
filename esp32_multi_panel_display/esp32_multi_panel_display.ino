@@ -155,127 +155,134 @@ void parseConfigCommand(String command) {
 // Enhanced protocol parser with variable frame sizes
 void parseSerialData() {
   static String inputBuffer = "";
+  static bool inFrameData = false;
+  static int expectedFrameSize = 0;
+  static int frameDataReceived = 0;
   
   while (Serial.available()) {
     char c = Serial.read();
-    inputBuffer += c;
     
-    // Check for configuration command
-    if (inputBuffer.startsWith("CONFIG:") && c == '\n') {
-      parseConfigCommand(inputBuffer.substring(0, inputBuffer.length() - 1));
-      inputBuffer = "";
-    }
-    // Check for frame command with size: FRAME:size:<data>:END
-    else if (inputBuffer.startsWith("FRAME:") && inputBuffer.indexOf(":END") != -1) {
-      parseFrameCommand(inputBuffer);
-      inputBuffer = "";
-    }
-    // Handle brightness command
-    else if (inputBuffer.startsWith("BRIGHTNESS:") && c == '\n') {
-      int brightness = inputBuffer.substring(11).toInt();
-      if (brightness >= 0 && brightness <= 255) {
-        current_brightness = brightness;
-        FastLED.setBrightness(brightness);
-        FastLED.show();
-        Serial.println("BRIGHTNESS_OK");
-      } else {
-        Serial.println("BRIGHTNESS_ERROR");
+    // If we're not in frame data mode, use normal parsing
+    if (!inFrameData) {
+      inputBuffer += c;
+      
+      // Check for configuration command
+      if (inputBuffer.startsWith("CONFIG:") && c == '\n') {
+        parseConfigCommand(inputBuffer.substring(0, inputBuffer.length() - 1));
+        inputBuffer = "";
       }
-      inputBuffer = "";
-    }
-    // Handle clear command
-    else if (inputBuffer.startsWith("CLEAR") && c == '\n') {
-      FastLED.clear();
-      FastLED.show();
-      Serial.println("CLEAR_OK");
-      inputBuffer = "";
-    }
-    // Handle status request
-    else if (inputBuffer.startsWith("STATUS") && c == '\n') {
-      Serial.print("STATUS: ");
-      Serial.print(MATRIX_WIDTH);
-      Serial.print("x");
-      Serial.print(MATRIX_HEIGHT);
-      Serial.print(" LEDs:");
-      Serial.print(NUM_LEDS);
-      Serial.print(" Brightness:");
-      Serial.print(current_brightness);
-      Serial.print(" Memory:");
-      Serial.print(ESP.getFreeHeap());
-      Serial.println();
-      inputBuffer = "";
-    }
-    // Handle info request
-    else if (inputBuffer.startsWith("INFO") && c == '\n') {
-      Serial.println("ESP32 Multi-Panel LED Matrix Display");
-      Serial.println("Commands:");
-      Serial.println("  CONFIG:width,height - Configure display size");
-      Serial.println("  FRAME:size:<data>:END - Send frame data");
-      Serial.println("  BRIGHTNESS:0-255 - Set brightness");
-      Serial.println("  CLEAR - Clear display");
-      Serial.println("  STATUS - Show current status");
-      Serial.println("  INFO - Show this help");
-      inputBuffer = "";
-    }
-    // Reset buffer if it gets too long (prevents memory issues)
-    else if (inputBuffer.length() > NUM_LEDS * 3 + 50) {
-      Serial.println("BUFFER_ERROR: Command too long");
-      inputBuffer = "";
+      // Check for frame command start: FRAME:size:
+      else if (inputBuffer.startsWith("FRAME:") && inputBuffer.indexOf(':', 6) != -1 && c == ':') {
+        // Found FRAME:size: - extract size and prepare for binary data
+        int firstColon = inputBuffer.indexOf(':', 6);
+        if (firstColon != -1) {
+          String sizeStr = inputBuffer.substring(6, firstColon);
+          expectedFrameSize = sizeStr.toInt();
+          
+          // Validate size
+          int requiredSize = NUM_LEDS * 3;
+          if (expectedFrameSize != requiredSize) {
+            Serial.print("FRAME_ERROR: Size mismatch. Expected:");
+            Serial.print(requiredSize);
+            Serial.print(" Got:");
+            Serial.println(expectedFrameSize);
+            inputBuffer = "";
+            continue;
+          }
+          
+          // Prepare for binary data reception
+          inFrameData = true;
+          frameDataReceived = 0;
+          inputBuffer = "";
+          
+          // Clear frame buffer
+          if (frameBuffer && configurationValid) {
+            memset(frameBuffer, 0, expectedFrameSize);
+          } else {
+            Serial.println("FRAME_ERROR: Not configured or memory allocation failed");
+            inFrameData = false;
+            continue;
+          }
+        }
+      }
+      // Handle brightness command
+      else if (inputBuffer.startsWith("BRIGHTNESS:") && c == '\n') {
+        int brightness = inputBuffer.substring(11).toInt();
+        if (brightness >= 0 && brightness <= 255) {
+          current_brightness = brightness;
+          FastLED.setBrightness(brightness);
+          FastLED.show();
+          Serial.println("BRIGHTNESS_OK");
+        } else {
+          Serial.println("BRIGHTNESS_ERROR");
+        }
+        inputBuffer = "";
+      }
+      // Handle clear command
+      else if (inputBuffer.startsWith("CLEAR") && c == '\n') {
+        FastLED.clear();
+        FastLED.show();
+        Serial.println("CLEAR_OK");
+        inputBuffer = "";
+      }
+      // Handle status request
+      else if (inputBuffer.startsWith("STATUS") && c == '\n') {
+        Serial.print("STATUS: ");
+        Serial.print(MATRIX_WIDTH);
+        Serial.print("x");
+        Serial.print(MATRIX_HEIGHT);
+        Serial.print(" LEDs:");
+        Serial.print(NUM_LEDS);
+        Serial.print(" Brightness:");
+        Serial.print(current_brightness);
+        Serial.print(" Memory:");
+        Serial.print(ESP.getFreeHeap());
+        Serial.println();
+        inputBuffer = "";
+      }
+      // Handle info request
+      else if (inputBuffer.startsWith("INFO") && c == '\n') {
+        Serial.println("ESP32 Multi-Panel LED Matrix Display");
+        Serial.println("Commands:");
+        Serial.println("  CONFIG:width,height - Configure display size");
+        Serial.println("  FRAME:size:<data>:END - Send frame data");
+        Serial.println("  BRIGHTNESS:0-255 - Set brightness");
+        Serial.println("  CLEAR - Clear display");
+        Serial.println("  STATUS - Show current status");
+        Serial.println("  INFO - Show this help");
+        inputBuffer = "";
+      }
+      // Reset buffer if it gets too long for non-frame commands
+      else if (inputBuffer.length() > 100) {
+        Serial.println("BUFFER_ERROR: Command too long");
+        inputBuffer = "";
+      }
+    } else {
+      // We're in frame data mode - collect binary data
+      if (frameDataReceived < expectedFrameSize) {
+        frameBuffer[frameDataReceived] = c;
+        frameDataReceived++;
+      } else {
+        // We've received all frame data, now look for :END
+        inputBuffer += c;
+        if (inputBuffer.endsWith(":END")) {
+          // Frame complete!
+          newFrameReady = true;
+          Serial.println("FRAME_OK");
+          inFrameData = false;
+          inputBuffer = "";
+        } else if (inputBuffer.length() > 10) {
+          // Something's wrong - reset
+          Serial.println("FRAME_ERROR: Invalid end marker");
+          inFrameData = false;
+          inputBuffer = "";
+        }
+      }
     }
   }
 }
 
-// Parse frame command with variable size
-void parseFrameCommand(String command) {
-  if (!configurationValid || frameBuffer == nullptr) {
-    Serial.println("FRAME_ERROR: Not configured or memory allocation failed");
-    return;
-  }
-  
-  // Find the size parameter: FRAME:size:<data>:END
-  int firstColon = command.indexOf(':', 6); // After "FRAME:"
-  int secondColon = command.indexOf(':', firstColon + 1);
-  int endPos = command.lastIndexOf(":END");
-  
-  if (firstColon == -1 || secondColon == -1 || endPos == -1) {
-    Serial.println("FRAME_ERROR: Invalid format. Use FRAME:size:<data>:END");
-    return;
-  }
-  
-  // Extract size
-  String sizeStr = command.substring(6, firstColon);
-  int expectedSize = sizeStr.toInt();
-  
-  // Validate size
-  int requiredSize = NUM_LEDS * 3;
-  if (expectedSize != requiredSize) {
-    Serial.print("FRAME_ERROR: Size mismatch. Expected:");
-    Serial.print(requiredSize);
-    Serial.print(" Got:");
-    Serial.println(expectedSize);
-    return;
-  }
-  
-  // Extract data
-  int dataStart = secondColon + 1;
-  int dataLength = endPos - dataStart;
-  
-  if (dataLength != expectedSize) {
-    Serial.print("FRAME_ERROR: Data length mismatch. Expected:");
-    Serial.print(expectedSize);
-    Serial.print(" Got:");
-    Serial.println(dataLength);
-    return;
-  }
-  
-  // Copy RGB data to frame buffer
-  for (int i = 0; i < dataLength; i++) {
-    frameBuffer[i] = command[dataStart + i];
-  }
-  
-  newFrameReady = true;
-  Serial.println("FRAME_OK");
-}
+// Note: parseFrameCommand function removed - frame parsing now handled directly in parseSerialData
 
 void displayFrame() {
   if (!newFrameReady || !configurationValid || frameBuffer == nullptr) {
