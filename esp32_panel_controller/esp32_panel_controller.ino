@@ -259,33 +259,21 @@ void process_serial_data() {
         command_buffer = "";
       }
       // Check for frame command start
-      else if (command_buffer.startsWith("FRAME:") && command_buffer.indexOf(':', 6) != -1 && c == ':') {
-        // Extract frame size from FRAME:size:
-        int colon_pos = command_buffer.indexOf(':', 6);
-        String size_str = command_buffer.substring(6, colon_pos);
-        expected_frame_size = size_str.toInt();
-        
-        // Validate frame size
-        int required_size = num_leds * 3;
-        if (expected_frame_size != required_size) {
-          Serial.print("FRAME_ERROR: Size mismatch. Expected ");
-          Serial.print(required_size);
-          Serial.print(", got ");
-          Serial.println(expected_frame_size);
+      else if (command_buffer.startsWith("FRAME:") && c != '\n') {
+        // Switch to frame data reception mode after FRAME:
+        if (command_buffer == "FRAME:") {
+          if (!display_configured || frame_buffer == nullptr) {
+            Serial.println("FRAME_ERROR: Display not configured");
+            command_buffer = "";
+            continue;
+          }
+          
+          // Switch to frame data reception mode
+          parse_state = RECEIVING_FRAME_DATA;
+          expected_frame_size = num_leds * 3;
+          received_frame_bytes = 0;
           command_buffer = "";
-          continue;
         }
-        
-        if (!display_configured || frame_buffer == nullptr) {
-          Serial.println("FRAME_ERROR: Display not configured");
-          command_buffer = "";
-          continue;
-        }
-        
-        // Switch to frame data reception mode
-        parse_state = RECEIVING_FRAME_DATA;
-        received_frame_bytes = 0;
-        command_buffer = "";
       }
       // Prevent command buffer overflow
       else if (command_buffer.length() > 100) {

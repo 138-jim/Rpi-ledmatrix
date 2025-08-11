@@ -104,45 +104,28 @@ class PanelController:
             self.serial_connection = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
-                timeout=5.0,
-                write_timeout=10.0
+                timeout=2.0
             )
             
-            # Wait for ESP32 boot
-            time.sleep(3)
-            self.serial_connection.reset_input_buffer()
+            self.connected = True
+            print(f"✓ Connected to ESP32 on {self.port}")
+            time.sleep(2)  # Wait for ESP32 to initialize
             
-            # Test with INFO command
-            self.serial_connection.write(b"INFO\\n")
-            self.serial_connection.flush()
-            time.sleep(1)
+            # Configure ESP32 for total display size
+            if self.total_width > 0 and self.total_height > 0:
+                success = self._configure_esp32(self.total_width, self.total_height)
+                if success:
+                    print(f"✓ ESP32 configured for {self.total_width}x{self.total_height} display")
+                else:
+                    print("⚠ ESP32 connected but configuration failed")
             
-            response = ""
-            start_time = time.time()
-            while time.time() - start_time < 5:
-                if self.serial_connection.in_waiting > 0:
-                    response += self.serial_connection.read_all().decode('utf-8', errors='ignore')
-                time.sleep(0.1)
+            return True
             
-            if "ESP32" in response:
-                self.connected = True
-                print("✓ ESP32 connected successfully")
-                
-                # Configure ESP32 for total display size
-                if self.total_width > 0 and self.total_height > 0:
-                    success = self._configure_esp32(self.total_width, self.total_height)
-                    if success:
-                        print(f"✓ ESP32 configured for {self.total_width}x{self.total_height} display")
-                    else:
-                        print("⚠ ESP32 connected but configuration failed")
-                
-                return True
-            else:
-                print("✗ No valid ESP32 response")
-                return False
-                
+        except serial.SerialException as e:
+            print(f"✗ Failed to connect: {e}")
+            return False
         except Exception as e:
-            print(f"✗ Connection failed: {e}")
+            print(f"✗ Connection error: {e}")
             return False
     
     def disconnect(self):
@@ -160,24 +143,17 @@ class PanelController:
         
         try:
             # Send CONFIG command
-            command = f"CONFIG:{width},{height}\\n"
+            command = f"CONFIG:{width},{height}\n"
             self.serial_connection.write(command.encode())
             self.serial_connection.flush()
             
             # Wait for CONFIG_OK response
-            start_time = time.time()
-            while time.time() - start_time < 10:
-                if self.serial_connection.in_waiting > 0:
-                    line = self.serial_connection.readline().decode().strip()
-                    if "CONFIG_OK" in line:
-                        return True
-                    elif "CONFIG_ERROR" in line:
-                        print(f"ESP32 config error: {line}")
-                        return False
-                time.sleep(0.1)
-            
-            print("ESP32 configuration timeout")
-            return False
+            response = self.serial_connection.readline().decode().strip()
+            if "CONFIG_OK" in response:
+                return True
+            else:
+                print(f"ESP32 config error: {response}")
+                return False
             
         except Exception as e:
             print(f"Configuration error: {e}")
@@ -247,40 +223,15 @@ class PanelController:
         try:
             # Convert to RGB bytes in row-major order
             rgb_data = frame.flatten().tobytes()
-            data_size = len(rgb_data)
             
-            # Clear input buffer
-            self.serial_connection.reset_input_buffer()
-            
-            # Send frame command: FRAME:size:<data>:END
-            header = f"FRAME:{data_size}:"
-            self.serial_connection.write(header.encode())
-            self.serial_connection.flush()
-            time.sleep(0.01)
-            
-            # Send binary data
-            self.serial_connection.write(rgb_data)
-            self.serial_connection.flush()
-            time.sleep(0.01)
-            
-            # Send end marker
-            self.serial_connection.write(b":END")
+            # Send frame with simple protocol: FRAME:<data>:END
+            command = b"FRAME:" + rgb_data + b":END"
+            self.serial_connection.write(command)
             self.serial_connection.flush()
             
             # Wait for acknowledgment
-            start_time = time.time()
-            while time.time() - start_time < 5:
-                if self.serial_connection.in_waiting > 0:
-                    response = self.serial_connection.readline().decode().strip()
-                    if response == "FRAME_OK":
-                        return True
-                    elif "FRAME_ERROR" in response:
-                        print(f"ESP32 frame error: {response}")
-                        return False
-                time.sleep(0.01)
-            
-            print("Frame send timeout")
-            return False
+            response = self.serial_connection.readline().decode().strip()
+            return response == "FRAME_OK"
             
         except Exception as e:
             print(f"Frame send error: {e}")
@@ -292,16 +243,10 @@ class PanelController:
             return False
         
         try:
-            self.serial_connection.write(b"CLEAR\\n")
+            self.serial_connection.write(b"CLEAR\n")
             self.serial_connection.flush()
-            
-            start_time = time.time()
-            while time.time() - start_time < 3:
-                if self.serial_connection.in_waiting > 0:
-                    response = self.serial_connection.readline().decode().strip()
-                    return response == "CLEAR_OK"
-                time.sleep(0.01)
-            return False
+            response = self.serial_connection.readline().decode().strip()
+            return response == "CLEAR_OK"
             
         except Exception as e:
             print(f"Clear error: {e}")
@@ -313,17 +258,11 @@ class PanelController:
             return False
         
         try:
-            command = f"BRIGHTNESS:{brightness}\\n"
+            command = f"BRIGHTNESS:{brightness}\n"
             self.serial_connection.write(command.encode())
             self.serial_connection.flush()
-            
-            start_time = time.time()
-            while time.time() - start_time < 3:
-                if self.serial_connection.in_waiting > 0:
-                    response = self.serial_connection.readline().decode().strip()
-                    return response == "BRIGHTNESS_OK"
-                time.sleep(0.01)
-            return False
+            response = self.serial_connection.readline().decode().strip()
+            return response == "BRIGHTNESS_OK"
             
         except Exception as e:
             print(f"Brightness error: {e}")
@@ -335,16 +274,11 @@ class PanelController:
             return None
         
         try:
-            self.serial_connection.write(b"STATUS\\n")
+            self.serial_connection.write(b"STATUS\n")
             self.serial_connection.flush()
-            
-            start_time = time.time()
-            while time.time() - start_time < 3:
-                if self.serial_connection.in_waiting > 0:
-                    response = self.serial_connection.readline().decode().strip()
-                    if "STATUS:" in response:
-                        return response
-                time.sleep(0.01)
+            response = self.serial_connection.readline().decode().strip()
+            if "STATUS:" in response:
+                return response
             return None
             
         except Exception as e:
