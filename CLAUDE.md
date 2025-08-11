@@ -5,11 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Overview
 
 This is an ESP32 LED matrix control system with multiple deployment configurations:
-- **ESP32 Hardware**: Three Arduino sketches for different use cases
+- **ESP32 Hardware**: Two Arduino sketches for different use cases
 - **Raspberry Pi Controller**: Python-based frame renderer and serial communicator 
 - **Cross-platform Testing**: Windows-compatible version with GUI mock display
-- **Multi-Panel System**: Configurable multi-panel LED matrix with GUI configuration
-- **Web Interface**: Vercel-hosted API for remote message control
 - **Auto-updater**: Git-based automatic deployment system for Raspberry Pi
 
 ## Architecture
@@ -17,16 +15,15 @@ This is an ESP32 LED matrix control system with multiple deployment configuratio
 The system uses a distributed architecture where different components handle specific responsibilities:
 
 ### ESP32 Firmware
-- `esp32_frame_display.ino`: Serial-controlled frame display (works with Raspberry Pi)
-- `code_for_esp32/code_for_esp32.ino`: WiFi-enabled version that fetches messages from web API
-- `esp32_multi_panel_display.ino`: Enhanced version supporting dynamic panel configurations and variable frame sizes
+- `esp32_frame_display/esp32_frame_display.ino`: Serial-controlled frame display (works with Raspberry Pi)
+- `esp32_multi_panel_display/esp32_multi_panel_display.ino`: Enhanced version supporting dynamic panel configurations and variable frame sizes
 
 ### Python Controllers
 - `led_matrix_controller.py`: Main Raspberry Pi controller with text rendering and pattern generation
 - `led_matrix_controller_windows_test.py`: Cross-platform version with mock display capabilities
 - `rpi_led_controller.py`: Simplified ESP32 communication wrapper
-- `multi_panel_led_controller.py`: Multi-panel system with GUI configuration and panel management
-- `multi_panel_esp32_controller.py`: Enhanced ESP32 communication supporting dynamic configurations
+- `test_mock_display.py`: Testing utilities for mock display functionality
+- `auto_updater.py`: Git-based automatic deployment system
 
 ### Communication Protocol
 ESP32 receives serial commands:
@@ -49,41 +46,38 @@ ESP32 receives serial commands:
 # Install dependencies
 pip install -r requirements.txt
 
-# Or use the provided script
-./install_dependencies.sh
+# Or use the provided setup scripts
+./install_dependencies.sh    # Basic installation
+./setup_rpi.sh              # Raspberry Pi specific setup
 ```
 
 ### Running Controllers
 ```bash
-# Main Raspberry Pi controller
+# Main Raspberry Pi controller with ESP32 hardware
 python3 led_matrix_controller.py
 
-# Cross-platform testing with mock display
+# Simplified ESP32 communication wrapper  
+python3 rpi_led_controller.py
+
+# Cross-platform testing with mock GUI display
 python3 led_matrix_controller_windows_test.py --mock --gui
 
 # Cross-platform testing with ASCII output
 python3 led_matrix_controller_windows_test.py --mock --ascii
 
-# Multi-panel controller (GUI mock mode)
-python3 multi_panel_led_controller.py --mock
-
-# Multi-panel controller with ESP32 hardware
-python3 multi_panel_led_controller.py --esp32 --port COM3
-
-# Test ESP32 multi-panel controller
-python3 multi_panel_esp32_controller.py --width 32 --height 16
+# Test mock display functionality
+python3 test_mock_display.py
 ```
 
-### Vercel Web Interface
-```bash
-cd vercel-website/
+### Hardware Setup
+1. Upload Arduino sketch to ESP32:
+   - Use `esp32_frame_display/esp32_frame_display.ino` for basic serial control
+   - Use `esp32_multi_panel_display/esp32_multi_panel_display.ino` for enhanced multi-panel support
+2. Connect ESP32 to Raspberry Pi via USB
+3. Run setup script: `./setup_rpi.sh` 
+4. Logout/login for serial permissions
+5. Find ESP32 port: `ls /dev/tty*` (usually `/dev/ttyUSB0` or `/dev/ttyACM0`)
 
-# Local development
-npm run dev
-
-# Deploy to production
-vercel --prod
-```
 
 ### Auto-updater System
 ```bash
@@ -103,11 +97,6 @@ In Arduino sketches, configure:
 - `FLIP_HORIZONTAL/VERTICAL`: Orientation adjustments
 - `SERPENTINE_LAYOUT`: Wiring pattern (zigzag vs row-by-row)
 
-### WiFi-enabled ESP32 
-Update in `code_for_esp32.ino`:
-- WiFi credentials (ssid/password)
-- Server URL for message API
-- Update interval timing
 
 ### Raspberry Pi Integration
 The auto-updater monitors git repository changes and restarts the controller automatically. Default paths in `auto_updater.py`:
@@ -132,39 +121,6 @@ Hardware controllers expect specific serial configuration:
 - Port: `/dev/ttyUSB0` (Raspberry Pi), `COM3` (Windows)
 - Frame format: Binary RGB data in serpentine layout for LED strips
 
-## Multi-Panel System
-
-The multi-panel system allows combining multiple LED matrix panels into larger displays with individual panel controls.
-
-### Key Features
-- **Dynamic Panel Configuration**: Add/remove panels with custom dimensions and positions
-- **Individual Panel Rotation**: Rotate each panel independently (0°, 90°, 180°, 270°)
-- **GUI Configuration Interface**: Visual panel layout editor with real-time preview
-- **Save/Load Configurations**: JSON-based panel configuration persistence
-- **Cross-Platform Display**: Works with both mock GUI display and ESP32 hardware
-- **Text Distribution**: Automatically distributes scrolling text across all configured panels
-
-### Usage Examples
-```bash
-# Run multi-panel controller with default 2x1 layout (mock display)
-python3 multi_panel_led_controller.py
-
-# Connect to ESP32 hardware
-python3 multi_panel_led_controller.py --esp32
-
-# Test ESP32 communication with 4x2 layout (64x32 total)
-python3 multi_panel_esp32_controller.py --width 64 --height 32
-```
-
-### Panel Configuration
-Use the GUI configuration interface to:
-1. Add/remove panels with custom dimensions
-2. Set panel positions (X/Y offsets) 
-3. Configure individual panel rotations
-4. Preview the complete layout
-5. Save/load configurations as JSON files
-
-The system automatically calculates total display dimensions and distributes text rendering across all configured panels.
 
 ## Dependencies
 
@@ -176,11 +132,3 @@ The system automatically calculates total display dimensions and distributes tex
 
 ### Arduino Libraries
 - `FastLED`: LED strip control
-- `WiFi`: ESP32 network connectivity (WiFi version only)
-- `HTTPClient`: Web API requests (WiFi version only)
-- `ArduinoJson`: JSON parsing (WiFi version only)
-
-### Node.js Dependencies
-- `next`: React framework for web interface
-- `react/react-dom`: UI components
-- `typescript`: Type checking support
