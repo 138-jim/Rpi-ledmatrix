@@ -399,27 +399,57 @@ class ESP32MultiPanelController:
             return self._connect_mock()
         
         try:
+            print(f"Attempting to connect to {self.port} at {self.baudrate} baud...")
             self.serial_connection = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
                 timeout=2.0,
                 write_timeout=2.0
             )
+            print(f"Serial connection established")
             
             # Test connection
             time.sleep(2)  # Wait for ESP32 to initialize
-            response = self._send_command("INFO")
             
-            if response and "ESP32" in response:
-                self.connected = True
-                print(f"✓ Connected to ESP32 on {self.port}")
-                return True
-            else:
-                print(f"✗ Invalid response from {self.port}")
-                return False
+            # Clear any pending data
+            self.serial_connection.reset_input_buffer()
+            
+            # Send INFO command and read multi-line response
+            self.serial_connection.write(b"INFO\n")
+            time.sleep(0.5)  # Give ESP32 time to respond
+            
+            response_lines = []
+            start_time = time.time()
+            while time.time() - start_time < 3.0:  # 3 second timeout
+                if self.serial_connection.in_waiting > 0:
+                    line = self.serial_connection.readline().decode().strip()
+                    if line:
+                        response_lines.append(line)
+                        if "ESP32 Multi-Panel" in line:
+                            self.connected = True
+                            print(f"✓ Connected to ESP32 on {self.port}")
+                            print(f"✓ Device: {line}")
+                            return True
+                else:
+                    time.sleep(0.1)
+            
+            print(f"✗ Invalid or no response from {self.port}")
+            if response_lines:
+                print(f"Received: {response_lines}")
+            return False
                 
         except Exception as e:
             print(f"✗ Failed to connect to {self.port}: {e}")
+            
+            # On Windows, suggest common troubleshooting
+            if sys.platform.startswith('win'):
+                print("Windows troubleshooting:")
+                print("- Check if ESP32 is connected via USB")
+                print("- Try different COM ports (COM3, COM4, COM5, etc.)")
+                print("- Ensure ESP32 drivers are installed")
+                print("- Check Device Manager for the correct COM port")
+                print("- Try enabling Mock Mode for testing without hardware")
+            
             return False
     
     def _connect_mock(self) -> bool:
@@ -538,15 +568,28 @@ class ESP32MultiPanelController:
             print(f"Error getting status: {e}")
             return None
     
-    def _send_command(self, command: str) -> Optional[str]:
+    def _send_command(self, command: str, timeout: float = 2.0) -> Optional[str]:
         """Send command and wait for response"""
         if not self.connected or not self.serial_connection:
             return None
         
         try:
+            # Clear input buffer
+            self.serial_connection.reset_input_buffer()
+            
+            # Send command
             self.serial_connection.write(f"{command}\n".encode())
-            response = self.serial_connection.readline().decode().strip()
-            return response
+            
+            # Wait for response with timeout
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                if self.serial_connection.in_waiting > 0:
+                    response = self.serial_connection.readline().decode().strip()
+                    if response:  # Return first non-empty line
+                        return response
+                time.sleep(0.01)
+            
+            return None  # Timeout
         except Exception as e:
             print(f"Error sending command '{command}': {e}")
             return None
@@ -1105,8 +1148,11 @@ def main():
     
     app = MultiPanelControllerGUI()
     
-    # Set initial port if specified
-    app.port_var.set(args.port)
+    # Set initial port if specified, with Windows defaults
+    if args.port == '/dev/ttyUSB0' and sys.platform.startswith('win'):
+        app.port_var.set('COM3')  # Default Windows port
+    else:
+        app.port_var.set(args.port)
     app.mock_mode_var.set(args.mock)
     
     app.run()
