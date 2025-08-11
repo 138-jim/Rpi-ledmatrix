@@ -471,15 +471,41 @@ class ESP32MultiPanelController:
         
         try:
             command = f"CONFIG:{width},{height}"
-            response = self._send_command(command)
             
-            if response and "CONFIG_OK" in response:
+            # Clear input buffer and send command
+            self.serial_connection.reset_input_buffer()
+            self.serial_connection.write(f"{command}\n".encode())
+            
+            # Read multiple lines looking for CONFIG_OK
+            start_time = time.time()
+            response_lines = []
+            config_ok = False
+            
+            while time.time() - start_time < 5.0:  # 5 second timeout for config
+                if self.serial_connection.in_waiting > 0:
+                    line = self.serial_connection.readline().decode().strip()
+                    if line:
+                        response_lines.append(line)
+                        print(f"ESP32: {line}")  # Debug output
+                        
+                        if "CONFIG_OK" in line:
+                            config_ok = True
+                            break
+                        elif "CONFIG_ERROR" in line or "ERROR" in line:
+                            print(f"✗ Configuration error: {line}")
+                            return False
+                else:
+                    time.sleep(0.1)
+            
+            if config_ok:
                 self.current_width = width
                 self.current_height = height
                 print(f"✓ Display configured: {width}x{height}")
                 return True
             else:
-                print(f"✗ Configuration failed: {response}")
+                print(f"✗ Configuration timeout or failed")
+                if response_lines:
+                    print(f"Received responses: {response_lines}")
                 return False
                 
         except Exception as e:
@@ -513,9 +539,20 @@ class ESP32MultiPanelController:
             full_command = command_start.encode() + rgb_data + command_end.encode()
             self.serial_connection.write(full_command)
             
-            # Wait for response
-            response = self.serial_connection.readline().decode().strip()
-            return response == "FRAME_OK"
+            # Wait for FRAME_OK response with timeout
+            start_time = time.time()
+            while time.time() - start_time < 3.0:  # 3 second timeout
+                if self.serial_connection.in_waiting > 0:
+                    response = self.serial_connection.readline().decode().strip()
+                    if response == "FRAME_OK":
+                        return True
+                    elif "FRAME_ERROR" in response or "ERROR" in response:
+                        print(f"Frame error: {response}")
+                        return False
+                time.sleep(0.01)
+            
+            print("Frame timeout - no response from ESP32")
+            return False
             
         except Exception as e:
             print(f"Error sending frame: {e}")
@@ -563,7 +600,8 @@ class ESP32MultiPanelController:
             return f"STATUS: {self.current_width}x{self.current_height} LEDs:{self.current_width*self.current_height} Brightness:128 Memory:200000"
         
         try:
-            return self._send_command("STATUS")
+            # STATUS command returns a single line response
+            return self._send_command("STATUS", timeout=3.0)
         except Exception as e:
             print(f"Error getting status: {e}")
             return None
