@@ -318,31 +318,59 @@ class MultiPanelSystem:
         return self.combined_matrix
     
     def apply_pattern_to_all(self, pattern_func, offset: float = 0):
-        """Apply a pattern to all panels"""
+        """Apply a pattern across the combined display, then distribute to panels"""
+        if not self.combined_matrix:
+            return
+        
+        # Generate pattern on the full combined display
+        temp_matrix = LEDMatrix(self.total_width, self.total_height)
+        pattern_func(temp_matrix, offset)
+        
+        # Distribute to individual panels
         for panel in self.panels:
-            pattern_func(panel.matrix, offset)
+            panel.matrix.clear()
+            
+            # Copy the relevant section from temp_matrix to this panel
+            for y in range(panel.height):
+                for x in range(panel.width):
+                    # Calculate source position in the combined display
+                    src_x = panel.x + x
+                    src_y = panel.y + y
+                    
+                    # Check bounds and copy pixel
+                    if (src_x < temp_matrix.width and src_y < temp_matrix.height and
+                        src_x >= 0 and src_y >= 0):
+                        r, g, b = temp_matrix.get_pixel(src_x, src_y)
+                        panel.matrix.set_pixel(x, y, r, g, b)
     
     def apply_text_to_combined(self, text: str, color: Tuple[int, int, int], scroll_offset: int = 0):
         """Apply scrolling text across the combined display"""
         if not self.combined_matrix:
             return
         
+        # Create temp matrix for full display
         temp_matrix = LEDMatrix(self.total_width, self.total_height)
         text_width = temp_matrix.get_text_width(text)
         
-        # Draw text with scroll offset
+        # Draw text with scroll offset on the full display
         temp_matrix.draw_text(text, scroll_offset, 0, color)
         
         # Distribute to panels
         for panel in self.panels:
             panel.matrix.clear()
-            rotated_width, rotated_height = panel.get_rotated_dimensions()
             
-            # Copy the relevant section to this panel
-            for y in range(min(rotated_height, temp_matrix.height - panel.y)):
-                for x in range(min(rotated_width, temp_matrix.width - panel.x)):
-                    if panel.x + x < temp_matrix.width and panel.y + y < temp_matrix.height:
-                        r, g, b = temp_matrix.get_pixel(panel.x + x, panel.y + y)
+            # Copy the relevant section from temp_matrix to this panel
+            # Note: panel rotation is handled later in render_combined_frame
+            for y in range(panel.height):
+                for x in range(panel.width):
+                    # Calculate source position in the combined display
+                    src_x = panel.x + x
+                    src_y = panel.y + y
+                    
+                    # Check bounds and copy pixel
+                    if (src_x < temp_matrix.width and src_y < temp_matrix.height and
+                        src_x >= 0 and src_y >= 0):
+                        r, g, b = temp_matrix.get_pixel(src_x, src_y)
                         panel.matrix.set_pixel(x, y, r, g, b)
     
     def save_configuration(self, filename: str):
@@ -403,8 +431,8 @@ class ESP32MultiPanelController:
             self.serial_connection = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
-                timeout=2.0,
-                write_timeout=2.0
+                timeout=5.0,
+                write_timeout=10.0
             )
             print(f"Serial connection established")
             
@@ -530,20 +558,35 @@ class ESP32MultiPanelController:
                     rgb_data.extend([r, g, b])
             
             data_size = len(rgb_data)
+            print(f"Sending frame: {matrix.width}x{matrix.height} = {data_size} bytes")
+            
+            # Clear input buffer first
+            self.serial_connection.reset_input_buffer()
             
             # Send frame command with size: FRAME:size:<data>:END
             command_start = f"FRAME:{data_size}:"
             command_end = ":END"
             
-            # Send as bytes
-            full_command = command_start.encode() + rgb_data + command_end.encode()
-            self.serial_connection.write(full_command)
+            # Send header first
+            self.serial_connection.write(command_start.encode())
+            self.serial_connection.flush()
+            time.sleep(0.01)  # Small delay
+            
+            # Send binary data
+            self.serial_connection.write(rgb_data)
+            self.serial_connection.flush()
+            time.sleep(0.01)  # Small delay
+            
+            # Send end marker
+            self.serial_connection.write(command_end.encode())
+            self.serial_connection.flush()
             
             # Wait for FRAME_OK response with timeout
             start_time = time.time()
-            while time.time() - start_time < 3.0:  # 3 second timeout
+            while time.time() - start_time < 10.0:  # 10 second timeout
                 if self.serial_connection.in_waiting > 0:
                     response = self.serial_connection.readline().decode().strip()
+                    print(f"ESP32 frame response: {response}")
                     if response == "FRAME_OK":
                         return True
                     elif "FRAME_ERROR" in response or "ERROR" in response:
@@ -585,7 +628,7 @@ class ESP32MultiPanelController:
             return True
         
         try:
-            response = self._send_command("CLEAR")
+            response = self._send_command("CLEAR", timeout=5.0)
             return response == "CLEAR_OK"
         except Exception as e:
             print(f"Error clearing display: {e}")
@@ -1121,46 +1164,59 @@ class MultiPanelControllerGUI:
         if not self.panel_system.panels:
             return
         
-        if self.current_mode == "text":
-            # Update scrolling text
-            self.panel_system.apply_text_to_combined(
-                self.current_text, 
-                self.current_color, 
-                self.scroll_position
-            )
+        try:
+            if self.current_mode == "text":
+                # Update scrolling text
+                self.panel_system.apply_text_to_combined(
+                    self.current_text, 
+                    self.current_color, 
+                    self.scroll_position
+                )
+                
+                # Update scroll position
+                self.scroll_position -= 1
+                text_width = LEDMatrix(1, 1).get_text_width(self.current_text)
+                if self.scroll_position < -text_width:
+                    self.scroll_position = self.panel_system.total_width
             
-            # Update scroll position
-            self.scroll_position -= 1
-            text_width = LEDMatrix(1, 1).get_text_width(self.current_text)
-            if self.scroll_position < -text_width:
-                self.scroll_position = self.panel_system.total_width
-        
-        elif self.current_mode == "pattern":
-            # Update pattern
-            pattern_funcs = {
-                "rainbow": PatternGenerator.rainbow,
-                "spiral": PatternGenerator.spiral,
-                "wave": PatternGenerator.wave,
-                "checkerboard": PatternGenerator.checkerboard,
-                "fire": PatternGenerator.fire,
-            }
+            elif self.current_mode == "pattern":
+                # Update pattern
+                pattern_funcs = {
+                    "rainbow": PatternGenerator.rainbow,
+                    "spiral": PatternGenerator.spiral,
+                    "wave": PatternGenerator.wave,
+                    "checkerboard": PatternGenerator.checkerboard,
+                    "fire": PatternGenerator.fire,
+                }
+                
+                pattern_func = pattern_funcs.get(self.current_pattern, PatternGenerator.rainbow)
+                self.panel_system.apply_pattern_to_all(pattern_func, self.pattern_offset)
+                
+                # Update pattern offset
+                self.pattern_offset += 0.1
             
-            pattern_func = pattern_funcs.get(self.current_pattern, PatternGenerator.rainbow)
-            self.panel_system.apply_pattern_to_all(pattern_func, self.pattern_offset)
+            # Render combined frame
+            combined_frame = self.panel_system.render_combined_frame()
             
-            # Update pattern offset
-            self.pattern_offset += 0.1
-        
-        # Render combined frame
-        combined_frame = self.panel_system.render_combined_frame()
-        
-        # Send to ESP32
-        if combined_frame and self.controller and self.controller.connected:
-            self.controller.send_frame(combined_frame)
-        
-        # Update mock display
-        if self.mock_display and not self.mock_display.closed and combined_frame:
-            self.mock_display.update_display(combined_frame)
+            # Send to ESP32 (but don't flood it)
+            if combined_frame and self.controller and self.controller.connected:
+                # Only send every few frames to avoid overwhelming ESP32
+                if hasattr(self, '_frame_counter'):
+                    self._frame_counter += 1
+                else:
+                    self._frame_counter = 0
+                
+                if self._frame_counter % 2 == 0:  # Send every 2nd frame
+                    success = self.controller.send_frame(combined_frame)
+                    if not success:
+                        print(f"Frame send failed at frame {self._frame_counter}")
+            
+            # Update mock display
+            if self.mock_display and not self.mock_display.closed and combined_frame:
+                self.mock_display.update_display(combined_frame)
+                
+        except Exception as e:
+            print(f"Frame update error: {e}")
     
     def run(self):
         """Run the GUI application"""
