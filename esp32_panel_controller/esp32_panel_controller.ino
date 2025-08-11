@@ -71,9 +71,8 @@ bool allocate_frame_buffer() {
   memset(frame_buffer, 0, buffer_size);
   display_configured = true;
   
-  Serial.print("BUFFER_ALLOCATED: ");
-  Serial.print(buffer_size);
-  Serial.println(" bytes");
+  // Only print debug info during startup, not during CONFIG commands
+  // (This prevents interfering with CONFIG_OK response)
   
   return true;
 }
@@ -133,15 +132,7 @@ bool configure_display(int width, int height) {
   display_height = height;
   num_leds = total_leds;
   
-  // Reallocate frame buffer
-  if (!allocate_frame_buffer()) {
-    return false;
-  }
-  
-  // Clear display
-  FastLED.clear();
-  FastLED.show();
-  
+  // Send CONFIG_OK first (before any debug output)
   Serial.print("CONFIG_OK: ");
   Serial.print(width);
   Serial.print("x");
@@ -149,6 +140,15 @@ bool configure_display(int width, int height) {
   Serial.print(" (");
   Serial.print(total_leds);
   Serial.println(" LEDs)");
+  
+  // Reallocate frame buffer (debug output will come after CONFIG_OK)
+  if (!allocate_frame_buffer()) {
+    return false;
+  }
+  
+  // Clear display
+  FastLED.clear();
+  FastLED.show();
   
   return true;
 }
@@ -410,8 +410,11 @@ void setup() {
   FastLED.clear();
   FastLED.show();
   
-  // Configure default display
+  // Configure default display  
   if (configure_display(DEFAULT_WIDTH, DEFAULT_HEIGHT)) {
+    Serial.print("Frame buffer: ");
+    Serial.print(num_leds * 3);
+    Serial.println(" bytes allocated");
     Serial.println();
     Serial.println("=== STARTUP TEST SEQUENCE ===");
     
