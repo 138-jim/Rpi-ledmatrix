@@ -867,8 +867,8 @@ class MultiPanelControllerGUI:
         add_inputs = ttk.Frame(add_frame)
         add_inputs.pack(fill=tk.X, padx=5, pady=5)
         
-        self.panel_width_var = tk.IntVar(value=32)
-        self.panel_height_var = tk.IntVar(value=32)
+        self.panel_width_var = tk.IntVar(value=16)
+        self.panel_height_var = tk.IntVar(value=16)
         self.panel_x_var = tk.IntVar(value=0)
         self.panel_y_var = tk.IntVar(value=0)
         self.panel_rotation_var = tk.IntVar(value=0)
@@ -906,8 +906,11 @@ class MultiPanelControllerGUI:
     
     def setup_default_panels(self):
         """Setup default panel configuration"""
-        # Add single 32x32 panel
-        self.panel_system.add_panel(32, 32, 0, 0, 0)
+        # Add four 16x16 panels in 2x2 grid to make 32x32 total
+        self.panel_system.add_panel(16, 16, 0, 0, 0)    # Top-left
+        self.panel_system.add_panel(16, 16, 16, 0, 0)   # Top-right
+        self.panel_system.add_panel(16, 16, 0, 16, 0)   # Bottom-left
+        self.panel_system.add_panel(16, 16, 16, 16, 0)  # Bottom-right
         self.update_panel_list()
     
     def update_panel_list(self):
