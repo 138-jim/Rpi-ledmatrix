@@ -48,7 +48,7 @@ int received_frame_bytes = 0;
 /*
  * Initialize frame buffer for current display size
  */
-bool allocate_frame_buffer() {
+bool allocate_frame_buffer(bool silent = false) {
   // Free existing buffer
   if (frame_buffer != nullptr) {
     free(frame_buffer);
@@ -62,7 +62,9 @@ bool allocate_frame_buffer() {
   frame_buffer = (uint8_t*)malloc(buffer_size);
   
   if (frame_buffer == nullptr) {
-    Serial.println("ERROR: Failed to allocate frame buffer");
+    if (!silent) {
+      Serial.println("ERROR: Failed to allocate frame buffer");
+    }
     display_configured = false;
     return false;
   }
@@ -71,8 +73,12 @@ bool allocate_frame_buffer() {
   memset(frame_buffer, 0, buffer_size);
   display_configured = true;
   
-  // Only print debug info during startup, not during CONFIG commands
-  // (This prevents interfering with CONFIG_OK response)
+  // Only print debug info if not silent (during startup)
+  if (!silent) {
+    Serial.print("BUFFER_ALLOCATED: ");
+    Serial.print(buffer_size);
+    Serial.println(" bytes");
+  }
   
   return true;
 }
@@ -141,8 +147,8 @@ bool configure_display(int width, int height) {
   Serial.print(total_leds);
   Serial.println(" LEDs)");
   
-  // Reallocate frame buffer (debug output will come after CONFIG_OK)
-  if (!allocate_frame_buffer()) {
+  // Reallocate frame buffer silently (no debug output during CONFIG)
+  if (!allocate_frame_buffer(true)) {  // true = silent mode
     return false;
   }
   
@@ -410,11 +416,13 @@ void setup() {
   FastLED.clear();
   FastLED.show();
   
-  // Configure default display  
-  if (configure_display(DEFAULT_WIDTH, DEFAULT_HEIGHT)) {
-    Serial.print("Frame buffer: ");
-    Serial.print(num_leds * 3);
-    Serial.println(" bytes allocated");
+  // Initialize default display without using configure_display (to avoid CONFIG_OK during startup)
+  display_width = DEFAULT_WIDTH;
+  display_height = DEFAULT_HEIGHT;
+  num_leds = DEFAULT_WIDTH * DEFAULT_HEIGHT;
+  
+  if (allocate_frame_buffer()) {  // Use verbose mode for startup
+    display_configured = true;
     Serial.println();
     Serial.println("=== STARTUP TEST SEQUENCE ===");
     
