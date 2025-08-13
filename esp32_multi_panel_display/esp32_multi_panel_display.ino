@@ -1,446 +1,418 @@
+/*
+ * WS2812B LED Panel Controller for ESP32
+ * Supports multiple panels with high-speed serial communication
+ * Compatible with FastLED library
+ */
+
 #include <FastLED.h>
+#include <vector>
 
-// LED Matrix Configuration - Now Dynamic
-#define LED_PIN     26        // GPIO pin connected to the LED data line
-#define MAX_LEDS    2048      // Maximum supported LEDs (e.g., 64x32 or 32x64)
-#define DEFAULT_BRIGHTNESS  50        // Default LED brightness (0-255)
+// Configuration
+#define MAX_PANELS 64          // Maximum number of panels (4x16 = 64 for 32x32)
+#define MAX_LEDS_PER_PANEL 64  // Maximum LEDs per panel (8x8)
+#define MAX_TOTAL_LEDS 4096    // Maximum total LEDs
 
-// Default configuration - supports single 32x32 panel or 4x 16x16 panels in 2x2 grid
-#define DEFAULT_WIDTH  32
-#define DEFAULT_HEIGHT 32
+// Pin definitions - Adjust based on your wiring
+// Using multiple pins for better performance with parallel output
+#define LED_PIN_1 13  // First set of panels
+#define LED_PIN_2 12  // Second set of panels
+#define LED_PIN_3 14  // Third set of panels
+#define LED_PIN_4 27  // Fourth set of panels
 
-// Display orientation settings for your specific LED panel wiring
-#define FLIP_HORIZONTAL true  // Set to true if text appears mirror-flipped
-#define FLIP_VERTICAL   false // Set to true if text appears upside-down
-#define SERPENTINE_LAYOUT true // Set to false if your LEDs go row-by-row instead of zigzag
+// Serial communication settings
+#define SERIAL_BAUDRATE 921600
+#define BUFFER_SIZE 2048
 
-// NOTE: For 4x 16x16 panels in 2x2 grid:
-// - All 1024 LEDs should be connected in a single data chain
-// - The Python controller handles the logical panel mapping
-// - This code treats it as one continuous 32x32 matrix
+// Protocol definitions
+#define START_BYTE_1 0xAA
+#define START_BYTE_2 0x55
 
-// Dynamic configuration variables
-int MATRIX_WIDTH = DEFAULT_WIDTH;
-int MATRIX_HEIGHT = DEFAULT_HEIGHT;
-int NUM_LEDS = DEFAULT_WIDTH * DEFAULT_HEIGHT;
-int current_brightness = DEFAULT_BRIGHTNESS;
+enum Commands {
+    CMD_SET_PIXELS = 0x01,
+    CMD_CLEAR = 0x02,
+    CMD_BRIGHTNESS = 0x03,
+    CMD_SHOW = 0x04,
+    CMD_CONFIG = 0x05
+};
 
-CRGB leds[MAX_LEDS];
-
-// Frame buffer for incoming data - now dynamic
-uint8_t* frameBuffer = nullptr;
-bool newFrameReady = false;
-bool configurationValid = true;
-
-// Configuration state
+// Panel configuration
 struct PanelConfig {
-  int total_width;
-  int total_height;
-  int total_leds;
-  bool configured;
-} panelConfig = {DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_WIDTH * DEFAULT_HEIGHT, true};
+    uint16_t numPanels;
+    uint16_t ledsPerPanel;
+    uint16_t totalLeds;
+    uint8_t brightness;
+};
 
-// Memory management
-void allocateFrameBuffer() {
-  // Free existing buffer
-  if (frameBuffer != nullptr) {
-    free(frameBuffer);
-    frameBuffer = nullptr;
-  }
-  
-  // Allocate new buffer
-  size_t bufferSize = NUM_LEDS * 3;
-  frameBuffer = (uint8_t*)malloc(bufferSize);
-  
-  if (frameBuffer == nullptr) {
-    Serial.println("ERROR: Failed to allocate frame buffer memory");
-    configurationValid = false;
-  } else {
-    // Initialize buffer to black
-    memset(frameBuffer, 0, bufferSize);
-    configurationValid = true;
-    Serial.print("Frame buffer allocated: ");
-    Serial.print(bufferSize);
-    Serial.println(" bytes");
-  }
-}
-
-// Convert XY coordinates to LED index with dynamic dimensions
-int XY(int x, int y) {
-  // Bounds check
-  if (x < 0 || x >= MATRIX_WIDTH || y < 0 || y >= MATRIX_HEIGHT) {
-    return -1; // Invalid position
-  }
-  
-  // Apply horizontal flip if needed
-  if (FLIP_HORIZONTAL) {
-    x = MATRIX_WIDTH - 1 - x;
-  }
-  
-  // Apply vertical flip if needed
-  if (FLIP_VERTICAL) {
-    y = MATRIX_HEIGHT - 1 - y;
-  }
-  
-  if (SERPENTINE_LAYOUT) {
-    // Serpentine layout (zigzag)
-    if (y & 0x01) {
-      // Odd rows run backwards
-      return (y + 1) * MATRIX_WIDTH - 1 - x;
-    } else {
-      // Even rows run forwards
-      return y * MATRIX_WIDTH + x;
+// LED panel class
+class LEDPanelController {
+private:
+    CRGB* leds[4];  // Array of LED arrays for parallel output
+    PanelConfig config;
+    uint8_t receiveBuffer[BUFFER_SIZE];
+    uint16_t bufferIndex;
+    uint16_t dataOffset;
+    bool receivingData;
+    uint8_t currentCommand;
+    uint16_t expectedDataLength;
+    uint16_t receivedDataLength;
+    
+public:
+    LEDPanelController() {
+        config.numPanels = 16;  // Default 4x4 grid
+        config.ledsPerPanel = 64;  // Default 8x8 panels
+        config.totalLeds = config.numPanels * config.ledsPerPanel;
+        config.brightness = 128;  // Default 50% brightness
+        
+        bufferIndex = 0;
+        dataOffset = 0;
+        receivingData = false;
+        currentCommand = 0;
+        expectedDataLength = 0;
+        receivedDataLength = 0;
+        
+        // Initialize LED arrays
+        for (int i = 0; i < 4; i++) {
+            leds[i] = nullptr;
+        }
     }
-  } else {
-    // Simple row-by-row layout
-    return y * MATRIX_WIDTH + x;
-  }
-}
-
-// Parse configuration command: CONFIG:width,height
-void parseConfigCommand(String command) {
-  int commaIndex = command.indexOf(',');
-  if (commaIndex == -1) {
-    Serial.println("CONFIG_ERROR: Invalid format. Use CONFIG:width,height");
-    return;
-  }
-  
-  String widthStr = command.substring(7, commaIndex); // After "CONFIG:"
-  String heightStr = command.substring(commaIndex + 1);
-  
-  int newWidth = widthStr.toInt();
-  int newHeight = heightStr.toInt();
-  
-  // Validate dimensions
-  if (newWidth <= 0 || newHeight <= 0) {
-    Serial.println("CONFIG_ERROR: Invalid dimensions");
-    return;
-  }
-  
-  int newNumLeds = newWidth * newHeight;
-  if (newNumLeds > MAX_LEDS) {
-    Serial.print("CONFIG_ERROR: Too many LEDs. Max: ");
-    Serial.println(MAX_LEDS);
-    return;
-  }
-  
-  // Update configuration
-  MATRIX_WIDTH = newWidth;
-  MATRIX_HEIGHT = newHeight;
-  NUM_LEDS = newNumLeds;
-  
-  panelConfig.total_width = newWidth;
-  panelConfig.total_height = newHeight;
-  panelConfig.total_leds = newNumLeds;
-  panelConfig.configured = true;
-  
-  // Reallocate frame buffer
-  allocateFrameBuffer();
-  
-  if (configurationValid) {
-    // Clear current display
-    FastLED.clear();
-    FastLED.show();
     
-    Serial.print("CONFIG_OK: ");
-    Serial.print(newWidth);
-    Serial.print("x");
-    Serial.print(newHeight);
-    Serial.print(" (");
-    Serial.print(newNumLeds);
-    Serial.println(" LEDs)");
-  }
-}
-
-// Enhanced protocol parser with variable frame sizes
-void parseSerialData() {
-  static String inputBuffer = "";
-  static bool inFrameData = false;
-  static int expectedFrameSize = 0;
-  static int frameDataReceived = 0;
-  
-  while (Serial.available()) {
-    char c = Serial.read();
-    
-    // If we're not in frame data mode, use normal parsing
-    if (!inFrameData) {
-      inputBuffer += c;
-      
-      // Check for configuration command
-      if (inputBuffer.startsWith("CONFIG:") && c == '\n') {
-        parseConfigCommand(inputBuffer.substring(0, inputBuffer.length() - 1));
-        inputBuffer = "";
-      }
-      // Check for frame command start: FRAME:size:
-      else if (inputBuffer.startsWith("FRAME:") && inputBuffer.indexOf(':', 6) != -1 && c == ':') {
-        // Found FRAME:size: - extract size and prepare for binary data
-        int firstColon = inputBuffer.indexOf(':', 6);
-        if (firstColon != -1) {
-          String sizeStr = inputBuffer.substring(6, firstColon);
-          expectedFrameSize = sizeStr.toInt();
-          
-          // Validate size
-          int requiredSize = NUM_LEDS * 3;
-          if (expectedFrameSize != requiredSize) {
-            Serial.print("FRAME_ERROR: Size mismatch. Expected:");
-            Serial.print(requiredSize);
-            Serial.print(" Got:");
-            Serial.println(expectedFrameSize);
-            inputBuffer = "";
-            continue;
-          }
-          
-          // Prepare for binary data reception
-          inFrameData = true;
-          frameDataReceived = 0;
-          inputBuffer = "";
-          
-          // Clear frame buffer
-          if (frameBuffer && configurationValid) {
-            memset(frameBuffer, 0, expectedFrameSize);
-          } else {
-            Serial.println("FRAME_ERROR: Not configured or memory allocation failed");
-            inFrameData = false;
-            continue;
-          }
+    void begin() {
+        // Calculate LEDs per pin (distribute evenly)
+        uint16_t ledsPerPin = config.totalLeds / 4;
+        
+        // Allocate memory for LED arrays
+        for (int i = 0; i < 4; i++) {
+            leds[i] = new CRGB[ledsPerPin];
+            memset(leds[i], 0, sizeof(CRGB) * ledsPerPin);
         }
-      }
-      // Handle brightness command
-      else if (inputBuffer.startsWith("BRIGHTNESS:") && c == '\n') {
-        int brightness = inputBuffer.substring(11).toInt();
-        if (brightness >= 0 && brightness <= 255) {
-          current_brightness = brightness;
-          FastLED.setBrightness(brightness);
-          FastLED.show();
-          Serial.println("BRIGHTNESS_OK");
-        } else {
-          Serial.println("BRIGHTNESS_ERROR");
-        }
-        inputBuffer = "";
-      }
-      // Handle clear command
-      else if (inputBuffer.startsWith("CLEAR") && c == '\n') {
+        
+        // Initialize FastLED for each pin
+        // Using parallel output for better performance
+        FastLED.addLeds<WS2812B, LED_PIN_1, GRB>(leds[0], ledsPerPin);
+        FastLED.addLeds<WS2812B, LED_PIN_2, GRB>(leds[1], ledsPerPin);
+        FastLED.addLeds<WS2812B, LED_PIN_3, GRB>(leds[2], ledsPerPin);
+        FastLED.addLeds<WS2812B, LED_PIN_4, GRB>(leds[3], ledsPerPin);
+        
+        FastLED.setBrightness(config.brightness);
         FastLED.clear();
         FastLED.show();
-        Serial.println("CLEAR_OK");
-        inputBuffer = "";
-      }
-      // Handle status request
-      else if (inputBuffer.startsWith("STATUS") && c == '\n') {
-        Serial.print("STATUS: ");
-        Serial.print(MATRIX_WIDTH);
-        Serial.print("x");
-        Serial.print(MATRIX_HEIGHT);
-        Serial.print(" LEDs:");
-        Serial.print(NUM_LEDS);
-        Serial.print(" Brightness:");
-        Serial.print(current_brightness);
-        Serial.print(" Memory:");
-        Serial.print(ESP.getFreeHeap());
-        Serial.println();
-        inputBuffer = "";
-      }
-      // Handle info request
-      else if (inputBuffer.startsWith("INFO") && c == '\n') {
-        Serial.println("ESP32 Multi-Panel LED Matrix Display");
-        Serial.println("Commands:");
-        Serial.println("  CONFIG:width,height - Configure display size");
-        Serial.println("  FRAME:size:<data>:END - Send frame data");
-        Serial.println("  BRIGHTNESS:0-255 - Set brightness");
-        Serial.println("  CLEAR - Clear display");
-        Serial.println("  STATUS - Show current status");
-        Serial.println("  INFO - Show this help");
-        inputBuffer = "";
-      }
-      // Reset buffer if it gets too long for non-frame commands
-      else if (inputBuffer.length() > 100) {
-        Serial.println("BUFFER_ERROR: Command too long");
-        inputBuffer = "";
-      }
-    } else {
-      // We're in frame data mode - collect binary data
-      if (frameDataReceived < expectedFrameSize) {
-        frameBuffer[frameDataReceived] = c;
-        frameDataReceived++;
-      } else {
-        // We've received all frame data, now look for :END
-        inputBuffer += c;
-        if (inputBuffer.endsWith(":END")) {
-          // Frame complete!
-          newFrameReady = true;
-          Serial.println("FRAME_OK");
-          inFrameData = false;
-          inputBuffer = "";
-        } else if (inputBuffer.length() > 10) {
-          // Something's wrong - reset
-          Serial.println("FRAME_ERROR: Invalid end marker");
-          inFrameData = false;
-          inputBuffer = "";
-        }
-      }
+        
+        // Start serial communication
+        Serial.begin(SERIAL_BAUDRATE);
+        Serial.setTimeout(10);
+        
+        // Send ready signal
+        Serial.println("ESP32 LED Controller Ready");
     }
-  }
-}
-
-// Note: parseFrameCommand function removed - frame parsing now handled directly in parseSerialData
-
-void displayFrame() {
-  if (!newFrameReady || !configurationValid || frameBuffer == nullptr) {
-    return;
-  }
-  
-  // Convert frame buffer to LED array
-  for (int i = 0; i < NUM_LEDS; i++) {
-    if (i < MAX_LEDS) {  // Safety check
-      leds[i] = CRGB(
-        frameBuffer[i * 3],     // R
-        frameBuffer[i * 3 + 1], // G
-        frameBuffer[i * 3 + 2]  // B
-      );
-    }
-  }
-  
-  FastLED.show();
-  newFrameReady = false;
-}
-
-// Test pattern functions
-void showTestPattern(int pattern = 0) {
-  FastLED.clear();
-  
-  switch (pattern) {
-    case 0: // Rainbow gradient
-      for (int i = 0; i < NUM_LEDS && i < MAX_LEDS; i++) {
-        leds[i] = CHSV(i * 255 / NUM_LEDS, 255, 128);
-      }
-      break;
-      
-    case 1: // Checkerboard
-      for (int y = 0; y < MATRIX_HEIGHT; y++) {
-        for (int x = 0; x < MATRIX_WIDTH; x++) {
-          int ledIndex = XY(x, y);
-          if (ledIndex >= 0 && ledIndex < MAX_LEDS) {
-            if ((x + y) % 2 == 0) {
-              leds[ledIndex] = CRGB::Red;
+    
+    void processSerial() {
+        while (Serial.available() > 0) {
+            uint8_t byte = Serial.read();
+            
+            if (!receivingData) {
+                // Look for start bytes
+                if (bufferIndex == 0 && byte == START_BYTE_1) {
+                    receiveBuffer[bufferIndex++] = byte;
+                } else if (bufferIndex == 1 && byte == START_BYTE_2) {
+                    receiveBuffer[bufferIndex++] = byte;
+                } else if (bufferIndex == 2) {
+                    // Command byte
+                    currentCommand = byte;
+                    receiveBuffer[bufferIndex++] = byte;
+                } else if (bufferIndex == 3) {
+                    // Data length low byte
+                    receiveBuffer[bufferIndex++] = byte;
+                } else if (bufferIndex == 4) {
+                    // Data length high byte
+                    receiveBuffer[bufferIndex++] = byte;
+                    expectedDataLength = (receiveBuffer[4] << 8) | receiveBuffer[3];
+                    receivedDataLength = 0;
+                    receivingData = true;
+                    
+                    if (expectedDataLength == 0) {
+                        // No data expected, process command immediately
+                        processCommand();
+                        resetBuffer();
+                    }
+                } else {
+                    // Invalid state, reset
+                    resetBuffer();
+                }
             } else {
-              leds[ledIndex] = CRGB::Blue;
+                // Receiving data bytes
+                if (receivedDataLength < expectedDataLength) {
+                    receiveBuffer[bufferIndex++] = byte;
+                    receivedDataLength++;
+                    
+                    // Check buffer overflow
+                    if (bufferIndex >= BUFFER_SIZE) {
+                        resetBuffer();
+                        return;
+                    }
+                } else {
+                    // This should be the checksum byte
+                    uint8_t calculatedChecksum = calculateChecksum();
+                    if (byte == calculatedChecksum) {
+                        processCommand();
+                    } else {
+                        Serial.println("Checksum error");
+                    }
+                    resetBuffer();
+                }
             }
-          }
         }
-      }
-      break;
-      
-    case 2: // Border
-      for (int y = 0; y < MATRIX_HEIGHT; y++) {
-        for (int x = 0; x < MATRIX_WIDTH; x++) {
-          int ledIndex = XY(x, y);
-          if (ledIndex >= 0 && ledIndex < MAX_LEDS) {
-            if (x == 0 || x == MATRIX_WIDTH-1 || y == 0 || y == MATRIX_HEIGHT-1) {
-              leds[ledIndex] = CRGB::White;
+    }
+    
+    uint8_t calculateChecksum() {
+        uint16_t sum = 0;
+        for (int i = 2; i < bufferIndex; i++) {
+            sum += receiveBuffer[i];
+        }
+        return sum & 0xFF;
+    }
+    
+    void processCommand() {
+        switch (currentCommand) {
+            case CMD_SET_PIXELS:
+                handleSetPixels();
+                break;
+            case CMD_CLEAR:
+                handleClear();
+                break;
+            case CMD_BRIGHTNESS:
+                handleBrightness();
+                break;
+            case CMD_SHOW:
+                handleShow();
+                break;
+            case CMD_CONFIG:
+                handleConfig();
+                break;
+            default:
+                Serial.println("Unknown command");
+                break;
+        }
+    }
+    
+    void handleSetPixels() {
+        // Extract offset from first 2 bytes of data
+        uint16_t offset = (receiveBuffer[6] << 8) | receiveBuffer[5];
+        
+        // Copy pixel data
+        uint16_t dataStart = 7;
+        uint16_t pixelDataLength = expectedDataLength - 2;
+        
+        // Calculate which LED array and position
+        for (uint16_t i = 0; i < pixelDataLength; i += 3) {
+            if (offset + i/3 < config.totalLeds) {
+                uint16_t ledIndex = offset + i/3;
+                uint8_t arrayIndex = ledIndex / (config.totalLeds / 4);
+                uint16_t localIndex = ledIndex % (config.totalLeds / 4);
+                
+                if (arrayIndex < 4 && leds[arrayIndex] != nullptr) {
+                    leds[arrayIndex][localIndex].r = receiveBuffer[dataStart + i];
+                    leds[arrayIndex][localIndex].g = receiveBuffer[dataStart + i + 1];
+                    leds[arrayIndex][localIndex].b = receiveBuffer[dataStart + i + 2];
+                }
             }
-          }
         }
-      }
-      break;
-      
-    case 3: // Center cross
-      for (int y = 0; y < MATRIX_HEIGHT; y++) {
-        for (int x = 0; x < MATRIX_WIDTH; x++) {
-          int ledIndex = XY(x, y);
-          if (ledIndex >= 0 && ledIndex < MAX_LEDS) {
-            if (x == MATRIX_WIDTH/2 || y == MATRIX_HEIGHT/2) {
-              leds[ledIndex] = CRGB::Green;
+    }
+    
+    void handleClear() {
+        for (int i = 0; i < 4; i++) {
+            if (leds[i] != nullptr) {
+                uint16_t ledsPerPin = config.totalLeds / 4;
+                memset(leds[i], 0, sizeof(CRGB) * ledsPerPin);
             }
-          }
         }
-      }
-      break;
-  }
-  
-  FastLED.show();
-}
+        FastLED.show();
+    }
+    
+    void handleBrightness() {
+        if (expectedDataLength >= 1) {
+            config.brightness = receiveBuffer[5];
+            FastLED.setBrightness(config.brightness);
+            FastLED.show();
+        }
+    }
+    
+    void handleShow() {
+        FastLED.show();
+    }
+    
+    void handleConfig() {
+        if (expectedDataLength >= 4) {
+            uint16_t newNumPanels = (receiveBuffer[6] << 8) | receiveBuffer[5];
+            uint16_t newLedsPerPanel = (receiveBuffer[8] << 8) | receiveBuffer[7];
+            
+            // Validate configuration
+            if (newNumPanels <= MAX_PANELS && 
+                newLedsPerPanel <= MAX_LEDS_PER_PANEL &&
+                newNumPanels * newLedsPerPanel <= MAX_TOTAL_LEDS) {
+                
+                // Update configuration
+                config.numPanels = newNumPanels;
+                config.ledsPerPanel = newLedsPerPanel;
+                config.totalLeds = config.numPanels * config.ledsPerPanel;
+                
+                // Reinitialize LED arrays
+                reinitializeLEDs();
+                
+                Serial.println("Configuration updated");
+            } else {
+                Serial.println("Invalid configuration");
+            }
+        }
+    }
+    
+    void reinitializeLEDs() {
+        // Clear existing LEDs
+        FastLED.clear();
+        FastLED.show();
+        
+        // Free existing memory
+        for (int i = 0; i < 4; i++) {
+            if (leds[i] != nullptr) {
+                delete[] leds[i];
+                leds[i] = nullptr;
+            }
+        }
+        
+        // Reallocate based on new configuration
+        uint16_t ledsPerPin = config.totalLeds / 4;
+        
+        for (int i = 0; i < 4; i++) {
+            leds[i] = new CRGB[ledsPerPin];
+            memset(leds[i], 0, sizeof(CRGB) * ledsPerPin);
+        }
+        
+        // Reinitialize FastLED
+        FastLED.addLeds<WS2812B, LED_PIN_1, GRB>(leds[0], ledsPerPin);
+        FastLED.addLeds<WS2812B, LED_PIN_2, GRB>(leds[1], ledsPerPin);
+        FastLED.addLeds<WS2812B, LED_PIN_3, GRB>(leds[2], ledsPerPin);
+        FastLED.addLeds<WS2812B, LED_PIN_4, GRB>(leds[3], ledsPerPin);
+        
+        FastLED.setBrightness(config.brightness);
+    }
+    
+    void resetBuffer() {
+        bufferIndex = 0;
+        receivingData = false;
+        currentCommand = 0;
+        expectedDataLength = 0;
+        receivedDataLength = 0;
+    }
+    
+    void runTestPattern() {
+        // Rainbow test pattern for debugging
+        static uint8_t hue = 0;
+        
+        for (int i = 0; i < 4; i++) {
+            if (leds[i] != nullptr) {
+                uint16_t ledsPerPin = config.totalLeds / 4;
+                for (int j = 0; j < ledsPerPin; j++) {
+                    leds[i][j] = CHSV(hue + (j * 2), 255, 255);
+                }
+            }
+        }
+        
+        FastLED.show();
+        hue++;
+    }
+};
+
+// Global controller instance
+LEDPanelController controller;
+
+// Performance monitoring
+unsigned long lastFrameTime = 0;
+unsigned long frameCount = 0;
+unsigned long lastFPSReport = 0;
 
 void setup() {
-  Serial.begin(115200);
-  Serial.println();
-  Serial.println("ESP32 Multi-Panel Frame Display Starting...");
-  
-  // Initialize FastLED with maximum LED count
-  FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, MAX_LEDS);
-  FastLED.setBrightness(current_brightness);
-  FastLED.clear();
-  FastLED.show();
-  
-  // Allocate initial frame buffer
-  allocateFrameBuffer();
-  
-  Serial.println();
-  Serial.println("=== ESP32 Multi-Panel LED Matrix ===");
-  Serial.print("Default size: ");
-  Serial.print(MATRIX_WIDTH);
-  Serial.print("x");
-  Serial.print(MATRIX_HEIGHT);
-  Serial.print(" (");
-  Serial.print(NUM_LEDS);
-  Serial.println(" LEDs)");
-  Serial.print("Max supported LEDs: ");
-  Serial.println(MAX_LEDS);
-  Serial.print("Available memory: ");
-  Serial.print(ESP.getFreeHeap());
-  Serial.println(" bytes");
-  Serial.println();
-  Serial.println("Commands:");
-  Serial.println("  CONFIG:width,height - Configure display size");
-  Serial.println("  FRAME:size:<data>:END - Send frame data");
-  Serial.println("  BRIGHTNESS:0-255 - Set brightness");
-  Serial.println("  CLEAR - Clear display");
-  Serial.println("  STATUS - Show status");
-  Serial.println("  INFO - Show help");
-  Serial.println();
-  
-  // Show startup test pattern
-  Serial.println("Showing startup test pattern...");
-  showTestPattern(0); // Rainbow
-  delay(2000);
-  showTestPattern(1); // Checkerboard
-  delay(2000);
-  showTestPattern(2); // Border
-  delay(2000);
-  showTestPattern(3); // Center cross
-  delay(2000);
-  FastLED.clear();
-  FastLED.show();
-  
-  Serial.println("Ready for commands and frames!");
+    // Initialize controller
+    controller.begin();
+    
+    // Set up performance monitoring
+    lastFrameTime = millis();
+    lastFPSReport = millis();
+    
+    // Optional: Show startup pattern
+    showStartupPattern();
 }
 
 void loop() {
-  parseSerialData();
-  displayFrame();
-  
-  // Small delay to prevent overwhelming the system
-  delayMicroseconds(100);
-  
-  // Watchdog pat (prevent reset on large displays)
-  yield();
+    // Process serial commands
+    controller.processSerial();
+    
+    // Performance monitoring (optional)
+    frameCount++;
+    if (millis() - lastFPSReport >= 1000) {
+        // Uncomment to see FPS in serial monitor
+        // Serial.print("FPS: ");
+        // Serial.println(frameCount);
+        frameCount = 0;
+        lastFPSReport = millis();
+    }
+    
+    // Small delay to prevent watchdog issues
+    delay(1);
 }
 
-// Error handling and diagnostics
-void printMemoryInfo() {
-  Serial.print("Free heap: ");
-  Serial.print(ESP.getFreeHeap());
-  Serial.println(" bytes");
-  
-  Serial.print("Frame buffer size: ");
-  if (frameBuffer != nullptr) {
-    Serial.print(NUM_LEDS * 3);
-    Serial.println(" bytes (allocated)");
-  } else {
-    Serial.println("Not allocated");
-  }
-  
-  Serial.print("LED array usage: ");
-  Serial.print(NUM_LEDS);
-  Serial.print("/");
-  Serial.println(MAX_LEDS);
+void showStartupPattern() {
+    // Show a brief startup pattern to indicate the system is ready
+    for (int i = 0; i < 50; i++) {
+        controller.runTestPattern();
+        delay(20);
+    }
+    
+    // Clear display
+    FastLED.clear();
+    FastLED.show();
 }
+
+// Optional: WiFi control addition
+#ifdef USE_WIFI
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "YOUR_SSID";
+const char* password = "YOUR_PASSWORD";
+
+WebServer server(80);
+
+void setupWiFi() {
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");
+    Serial.print("Connected to WiFi. IP: ");
+    Serial.println(WiFi.localIP());
+    
+    // Set up web server endpoints
+    server.on("/clear", HTTP_GET, []() {
+        FastLED.clear();
+        FastLED.show();
+        server.send(200, "text/plain", "Display cleared");
+    });
+    
+    server.on("/brightness", HTTP_GET, []() {
+        if (server.hasArg("value")) {
+            int brightness = server.arg("value").toInt();
+            if (brightness >= 0 && brightness <= 255) {
+                FastLED.setBrightness(brightness);
+                FastLED.show();
+                server.send(200, "text/plain", "Brightness set");
+            } else {
+                server.send(400, "text/plain", "Invalid brightness value");
+            }
+        } else {
+            server.send(400, "text/plain", "Missing brightness value");
+        }
+    });
+    
+    server.begin();
+}
+#endif
