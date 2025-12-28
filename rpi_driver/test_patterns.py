@@ -405,8 +405,27 @@ def elapsed_time(width: int, height: int, offset: float = 0) -> np.ndarray:
         line3 = ""
 
     # Draw text on three lines with better spacing
-    line_spacing = 11  # Pixels between lines
-    start_y = 5  # Start lower on display
+    line_spacing = 10  # Pixels between lines
+    start_y = 2  # Start near top of display
+
+    # Create gradient or pattern effect for text
+    # Offset cycles 0-1 every ~10 seconds at 30fps
+    pattern_mode = int(offset * 3) % 4  # Changes pattern every ~3.3 seconds
+
+    if pattern_mode == 0:
+        # Rainbow cycle
+        hue = (offset * 0.1) % 1.0
+        r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        color = (int(r * 255), int(g * 255), int(b * 255))
+    elif pattern_mode == 1:
+        # Solid cyan
+        color = (0, 255, 255)
+    elif pattern_mode == 2:
+        # Solid magenta
+        color = (255, 0, 255)
+    else:
+        # Solid white
+        color = (255, 255, 255)
 
     # Line 1
     bbox = draw.textbbox((0, 0), line1, font=font)
