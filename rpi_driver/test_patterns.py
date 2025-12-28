@@ -459,8 +459,9 @@ def elapsed_time(width: int, height: int, offset: float = 0) -> np.ndarray:
         x = (width - text_width) // 2
         draw.text((x, start_y + line_spacing * 2), line3, fill=color, font=font)
 
-    # Rotate 180 degrees to compensate for panel orientation
+    # Rotate 180 degrees and flip horizontally to compensate for panel orientation
     img = img.rotate(180)
+    img = img.transpose(Image.FLIP_LEFT_RIGHT)
 
     # Convert to numpy array
     frame = np.array(img, dtype=np.uint8)
