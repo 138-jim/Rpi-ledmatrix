@@ -192,6 +192,32 @@ async function stopPattern() {
     }
 }
 
+// Set elapsed time color
+async function setElapsedColor(color) {
+    try {
+        const response = await fetch(`${API_BASE}/api/elapsed-time-color`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                color: color
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || `HTTP ${response.status}`);
+        }
+
+        showStatus(`Elapsed time color set to ${color}`, 'success');
+
+    } catch (error) {
+        console.error('Error setting elapsed time color:', error);
+        showStatus(`Error setting color: ${error.message}`, 'error');
+    }
+}
+
 // Set brightness
 async function setBrightness() {
     try {

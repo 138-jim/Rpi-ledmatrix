@@ -48,6 +48,10 @@ class TestPatternRequest(BaseModel):
     duration: Optional[float] = 0  # 0 = indefinite
 
 
+class ElapsedTimeColorRequest(BaseModel):
+    color: str  # rainbow, cyan, magenta, white, red, green, blue, yellow, purple, orange
+
+
 class StatusResponse(BaseModel):
     fps: float
     queue_size: int
@@ -395,6 +399,35 @@ class WebAPIServer:
 
             except Exception as e:
                 logger.error(f"Error stopping pattern: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        # Elapsed time color endpoint
+        @self.app.post("/api/elapsed-time-color")
+        async def set_elapsed_time_color(request: ElapsedTimeColorRequest):
+            """Set color for elapsed time pattern"""
+            try:
+                color = request.color.lower()
+
+                # Validate color
+                valid_colors = ['rainbow', 'cyan', 'magenta', 'white', 'red',
+                               'green', 'blue', 'yellow', 'purple', 'orange']
+                if color not in valid_colors:
+                    raise HTTPException(status_code=400,
+                                      detail=f"Invalid color. Must be one of: {', '.join(valid_colors)}")
+
+                # Set color mode on the elapsed_time function
+                test_patterns.elapsed_time.color_mode = color
+
+                return {
+                    "status": "success",
+                    "color": color,
+                    "message": f"Elapsed time color set to {color}"
+                }
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error setting elapsed time color: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
         # Status endpoint

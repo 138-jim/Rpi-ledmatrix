@@ -406,26 +406,39 @@ def elapsed_time(width: int, height: int, offset: float = 0) -> np.ndarray:
 
     # Draw text on three lines with better spacing
     line_spacing = 10  # Pixels between lines
-    start_y = 2  # Start near top of display
+    start_y = 0  # Start at top of display
 
-    # Create gradient or pattern effect for text
-    # Offset cycles 0-1 every ~10 seconds at 30fps
-    pattern_mode = int(offset * 3) % 4  # Changes pattern every ~3.3 seconds
+    # Get color based on global setting (controlled via web UI)
+    color_mode = getattr(elapsed_time, 'color_mode', 'rainbow')
 
-    if pattern_mode == 0:
+    if color_mode == 'rainbow':
         # Rainbow cycle
         hue = (offset * 0.1) % 1.0
         r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
         color = (int(r * 255), int(g * 255), int(b * 255))
-    elif pattern_mode == 1:
-        # Solid cyan
+    elif color_mode == 'cyan':
         color = (0, 255, 255)
-    elif pattern_mode == 2:
-        # Solid magenta
+    elif color_mode == 'magenta':
         color = (255, 0, 255)
-    else:
-        # Solid white
+    elif color_mode == 'white':
         color = (255, 255, 255)
+    elif color_mode == 'red':
+        color = (255, 0, 0)
+    elif color_mode == 'green':
+        color = (0, 255, 0)
+    elif color_mode == 'blue':
+        color = (0, 0, 255)
+    elif color_mode == 'yellow':
+        color = (255, 255, 0)
+    elif color_mode == 'purple':
+        color = (128, 0, 255)
+    elif color_mode == 'orange':
+        color = (255, 165, 0)
+    else:
+        # Default to rainbow
+        hue = (offset * 0.1) % 1.0
+        r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        color = (int(r * 255), int(g * 255), int(b * 255))
 
     # Line 1
     bbox = draw.textbbox((0, 0), line1, font=font)
