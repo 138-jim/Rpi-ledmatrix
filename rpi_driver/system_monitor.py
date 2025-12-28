@@ -21,12 +21,12 @@ class SystemMonitor:
     # WS2812B LED specifications
     # Each LED has 3 channels (R, G, B)
     # At 5V and full brightness:
-    # - Per channel: ~6.67mA (20mA / 3)
-    # - Full white (all channels max): ~20mA per LED
-    # - Power per LED at full white: 0.1W (20mA * 5V)
+    # - Per channel: 20mA at max brightness
+    # - Full white (all channels max): 60mA per LED (20mA × 3)
+    # - Power per LED at full white: 0.3W (60mA * 5V)
     LED_VOLTAGE = 5.0  # Volts
-    LED_CURRENT_PER_CHANNEL_MAX = 6.67  # mA at full brightness per channel
-    LED_CURRENT_FULL_WHITE = 20.0  # mA per LED at full white
+    LED_CURRENT_PER_CHANNEL_MAX = 20.0  # mA at full brightness per channel
+    LED_CURRENT_FULL_WHITE = 60.0  # mA per LED at full white
 
     # Raspberry Pi idle power consumption estimates (in Watts)
     # These are baseline values - actual will vary with model
@@ -153,8 +153,8 @@ class SystemMonitor:
         Calculate LED power consumption based on current frame colors and brightness
 
         WS2812B power consumption:
-        - Each channel (R, G, B) at max: ~6.67mA at 5V
-        - Full white LED: ~20mA at 5V = 0.1W
+        - Each channel (R, G, B) at max: 20mA at 5V
+        - Full white LED: 60mA at 5V = 0.3W (20mA × 3 channels)
         - Power scales linearly with color intensity and brightness
 
         Args:
