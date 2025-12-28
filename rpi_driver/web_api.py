@@ -52,6 +52,12 @@ class ElapsedTimeColorRequest(BaseModel):
     color: str  # rainbow, cyan, magenta, white, red, green, blue, yellow, purple, orange
 
 
+class SleepScheduleRequest(BaseModel):
+    off_time: str  # HH:MM format (24-hour)
+    on_time: str   # HH:MM format (24-hour)
+    enabled: bool
+
+
 class StatusResponse(BaseModel):
     fps: float
     queue_size: int
@@ -164,6 +170,7 @@ class WebAPIServer:
                  mapper: CoordinateMapper,
                  display_controller: DisplayController,
                  config_path: str,
+                 sleep_scheduler=None,
                  static_dir: str = "static"):
         """
         Initialize web API server
@@ -175,6 +182,7 @@ class WebAPIServer:
             mapper: Coordinate mapper instance
             display_controller: Display controller instance
             config_path: Path to configuration file
+            sleep_scheduler: Sleep scheduler instance
             static_dir: Directory containing static web files
         """
         self.frame_queue = frame_queue
@@ -183,6 +191,7 @@ class WebAPIServer:
         self.mapper = mapper
         self.display_controller = display_controller
         self.config_path = config_path
+        self.sleep_scheduler = sleep_scheduler
         self.static_dir = Path(static_dir)
 
         self.config_manager = ConfigManager()
@@ -428,6 +437,52 @@ class WebAPIServer:
                 raise
             except Exception as e:
                 logger.error(f"Error setting elapsed time color: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        # Sleep schedule endpoints
+        @self.app.post("/api/sleep-schedule")
+        async def set_sleep_schedule(request: SleepScheduleRequest):
+            """Set sleep schedule"""
+            try:
+                if not self.sleep_scheduler:
+                    raise HTTPException(status_code=503,
+                                      detail="Sleep scheduler not available")
+
+                self.sleep_scheduler.set_schedule(
+                    request.off_time,
+                    request.on_time,
+                    request.enabled
+                )
+
+                return {
+                    "status": "success",
+                    "schedule": self.sleep_scheduler.get_schedule()
+                }
+
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error setting sleep schedule: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/sleep-schedule")
+        async def get_sleep_schedule():
+            """Get current sleep schedule"""
+            try:
+                if not self.sleep_scheduler:
+                    return {
+                        "enabled": False,
+                        "off_time": None,
+                        "on_time": None,
+                        "is_sleeping": False
+                    }
+
+                return self.sleep_scheduler.get_schedule()
+
+            except Exception as e:
+                logger.error(f"Error getting sleep schedule: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
         # Status endpoint

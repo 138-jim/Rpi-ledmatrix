@@ -10,9 +10,13 @@ window.addEventListener('DOMContentLoaded', () => {
     console.log('LED Display Driver UI loaded');
     refreshConfig();
     refreshStatus();
+    loadSleepSchedule();
 
     // Auto-refresh status every 2 seconds
     setInterval(refreshStatus, 2000);
+
+    // Auto-refresh sleep schedule every 30 seconds
+    setInterval(loadSleepSchedule, 30000);
 });
 
 // Load and display configuration
@@ -215,6 +219,76 @@ async function setElapsedColor(color) {
     } catch (error) {
         console.error('Error setting elapsed time color:', error);
         showStatus(`Error setting color: ${error.message}`, 'error');
+    }
+}
+
+// Save sleep schedule
+async function saveSleepSchedule() {
+    try {
+        const offTime = document.getElementById('sleepOffTime').value;
+        const onTime = document.getElementById('sleepOnTime').value;
+        const enabled = document.getElementById('sleepEnabled').checked;
+
+        const response = await fetch(`${API_BASE}/api/sleep-schedule`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                off_time: offTime,
+                on_time: onTime,
+                enabled: enabled
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        updateSleepStatus(result.schedule);
+        showStatus(`Sleep schedule ${enabled ? 'enabled' : 'disabled'}`, 'success');
+
+    } catch (error) {
+        console.error('Error saving sleep schedule:', error);
+        showStatus(`Error saving schedule: ${error.message}`, 'error');
+    }
+}
+
+// Load and update sleep schedule status
+async function loadSleepSchedule() {
+    try {
+        const response = await fetch(`${API_BASE}/api/sleep-schedule`);
+        if (response.ok) {
+            const schedule = await response.json();
+
+            // Update UI with current values
+            if (schedule.off_time) {
+                document.getElementById('sleepOffTime').value = schedule.off_time;
+            }
+            if (schedule.on_time) {
+                document.getElementById('sleepOnTime').value = schedule.on_time;
+            }
+            document.getElementById('sleepEnabled').checked = schedule.enabled;
+
+            updateSleepStatus(schedule);
+        }
+    } catch (error) {
+        console.error('Error loading sleep schedule:', error);
+    }
+}
+
+// Update sleep status display
+function updateSleepStatus(schedule) {
+    const statusDiv = document.getElementById('sleepStatus');
+    if (schedule.enabled) {
+        const status = schedule.is_sleeping ? '😴 Display is sleeping' : '✅ Schedule active';
+        statusDiv.innerHTML = `${status}<br>Off: ${schedule.off_time} | On: ${schedule.on_time}`;
+        statusDiv.style.color = schedule.is_sleeping ? '#e74c3c' : '#27ae60';
+    } else {
+        statusDiv.innerHTML = 'Schedule disabled';
+        statusDiv.style.color = '#7f8c8d';
     }
 }
 

@@ -269,6 +269,26 @@
                     </div>
                 </div>
 
+                <!-- Sleep Timer -->
+                <div class="panel" style="margin-top: 20px;">
+                    <h2>Sleep Timer</h2>
+                    <div class="control-group">
+                        <label>Turn Off At (24-hour)</label>
+                        <input type="time" id="sleepOffTime" value="23:00">
+                    </div>
+                    <div class="control-group" style="margin-top: 10px;">
+                        <label>Turn On At (24-hour)</label>
+                        <input type="time" id="sleepOnTime" value="07:00">
+                    </div>
+                    <div class="control-group" style="margin-top: 10px;">
+                        <label>
+                            <input type="checkbox" id="sleepEnabled"> Enable Sleep Timer
+                        </label>
+                    </div>
+                    <button onclick="saveSleepSchedule()" style="margin-top: 10px; width: 100%;">💤 Save Schedule</button>
+                    <div id="sleepStatus" style="margin-top: 10px; font-size: 0.9em; color: #7f8c8d;"></div>
+                </div>
+
                 <!-- System Status -->
                 <div class="panel" style="margin-top: 20px;">
                     <h2>System Status</h2>

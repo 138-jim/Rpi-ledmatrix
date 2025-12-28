@@ -20,6 +20,7 @@ from .coordinate_mapper import CoordinateMapper
 from .display_controller import DisplayController
 from .frame_receiver import UDPFrameReceiver, PipeFrameReceiver
 from .web_api import WebAPIServer
+from .sleep_scheduler import SleepScheduler
 
 
 # Configure logging
@@ -145,6 +146,13 @@ class LEDDisplaySystem:
                     height
                 )
 
+            # Initialize sleep scheduler
+            logger.info("Initializing sleep scheduler")
+            self.sleep_scheduler = SleepScheduler(
+                set_brightness_callback=self.led_driver.set_brightness
+            )
+            self.sleep_scheduler.start()
+
             # Initialize web API
             logger.info(f"Initializing web API server on port {self.port}")
             self.web_api = WebAPIServer(
@@ -154,6 +162,7 @@ class LEDDisplaySystem:
                 self.mapper,
                 self.display_controller,
                 self.config_path,
+                sleep_scheduler=self.sleep_scheduler,
                 static_dir="static"
             )
 
@@ -220,6 +229,10 @@ class LEDDisplaySystem:
 
         if self.pipe_receiver:
             self.pipe_receiver.stop()
+
+        # Stop sleep scheduler
+        if hasattr(self, 'sleep_scheduler') and self.sleep_scheduler:
+            self.sleep_scheduler.stop()
 
         logger.info("LED Display System shutdown complete")
 
