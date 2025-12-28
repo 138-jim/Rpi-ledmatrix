@@ -348,11 +348,8 @@ def elapsed_time(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Display elapsed time since a specific date
 
-    Shows time elapsed since January 1, 2025 00:00:00
-    Format changes based on duration:
-    - Less than 1 day: "Xh Ym" (hours and minutes)
-    - Less than 100 days: "X days"
-    - 100+ days: "XXXd" (days abbreviated)
+    Shows time elapsed since July 29, 2025 00:00:00
+    Uses large, blocky numbers readable on LED matrix
 
     Args:
         width: Frame width
@@ -366,64 +363,72 @@ def elapsed_time(width: int, height: int, offset: float = 0) -> np.ndarray:
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
     # Calculate elapsed time from reference date
-    # Change this date to whatever you want!
     reference_date = datetime(2025, 7, 29, 0, 0, 0)
     now = datetime.now()
     elapsed = now - reference_date
 
     # Format the time based on duration
     total_seconds = elapsed.total_seconds()
-    days = elapsed.days
-    hours = int(total_seconds // 3600)
-    minutes = int((total_seconds % 3600) // 60)
+    days = abs(elapsed.days)  # Use absolute value to handle future dates
+    hours = int(abs(total_seconds) // 3600)
+    minutes = int((abs(total_seconds) % 3600) // 60)
 
-    # Choose format based on duration
+    # Determine if counting up or down
+    is_future = total_seconds < 0
+
+    # Choose format and scale - optimized for 32x32 display
     if days < 1:
-        # Less than a day: show hours and minutes
-        text = f"{hours}h {minutes}m"
-        font_size = 8
+        # Less than a day: show hours
+        if hours < 10:
+            text = f"{hours}h"
+            scale = 3  # Larger for single digit
+        else:
+            text = f"{hours}h"
+            scale = 2
     elif days < 100:
-        # Less than 100 days: show "X days"
-        text = f"{days} days"
-        font_size = 10
-    else:
-        # 100+ days: abbreviated format
+        # 1-99 days
         text = f"{days}d"
-        font_size = 12
+        scale = 2 if days < 10 else 2
+    else:
+        # 100+ days
+        text = f"{days}d"
+        scale = 1
 
-    # Create PIL image for text rendering
-    img = Image.new('RGB', (width, height), color=(0, 0, 0))
+    # Create PIL image for text rendering - use larger canvas then scale down
+    render_scale = 4
+    img = Image.new('RGB', (width * render_scale, height * render_scale), color=(0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Try to load a font, fall back to default if not available
-    try:
-        # Try to use a monospace font for better readability
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", font_size)
-    except:
-        try:
-            # Fall back to default PIL font
-            font = ImageFont.load_default()
-        except:
-            # If all else fails, use PIL's basic font
-            font = ImageFont.load_default()
+    # Use default bitmap font (blocky and readable)
+    font = ImageFont.load_default()
 
-    # Calculate text position (center)
+    # Calculate text size and position for centering
     bbox = draw.textbbox((0, 0), text, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
-    x = (width - text_width) // 2
-    y = (height - text_height) // 2
+
+    # Center position on the larger canvas
+    x = ((width * render_scale) - text_width) // 2
+    y = ((height * render_scale) - text_height) // 2
 
     # Animated color based on offset
     hue = (offset * 0.1) % 1.0
     r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
     color = (int(r * 255), int(g * 255), int(b * 255))
 
-    # Draw the text
+    # Draw the text on large canvas
     draw.text((x, y), text, fill=color, font=font)
+
+    # Scale down to fit display using nearest neighbor (keeps it blocky)
+    img = img.resize((width, height), Image.NEAREST)
 
     # Convert PIL image to numpy array
     frame = np.array(img, dtype=np.uint8)
+
+    # Add indicator if counting down to future date
+    if is_future:
+        # Add small indicator in corner that it's counting down
+        frame[0:2, 0:2] = [255, 0, 0]  # Red dot in top-left
 
     return frame
 
