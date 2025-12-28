@@ -404,27 +404,28 @@ def elapsed_time(width: int, height: int, offset: float = 0) -> np.ndarray:
         line2 = f"{minutes}M"
         line3 = ""
 
-    # Draw text on three lines, evenly spaced
-    y_spacing = height // 4
+    # Draw text on three lines with better spacing
+    line_spacing = 11  # Pixels between lines
+    start_y = 5  # Start lower on display
 
     # Line 1
     bbox = draw.textbbox((0, 0), line1, font=font)
     text_width = bbox[2] - bbox[0]
     x = (width - text_width) // 2
-    draw.text((x, y_spacing), line1, fill=color, font=font)
+    draw.text((x, start_y), line1, fill=color, font=font)
 
     # Line 2
     bbox = draw.textbbox((0, 0), line2, font=font)
     text_width = bbox[2] - bbox[0]
     x = (width - text_width) // 2
-    draw.text((x, y_spacing * 2), line2, fill=color, font=font)
+    draw.text((x, start_y + line_spacing), line2, fill=color, font=font)
 
     # Line 3 (if exists)
     if line3:
         bbox = draw.textbbox((0, 0), line3, font=font)
         text_width = bbox[2] - bbox[0]
         x = (width - text_width) // 2
-        draw.text((x, y_spacing * 3), line3, fill=color, font=font)
+        draw.text((x, start_y + line_spacing * 2), line3, fill=color, font=font)
 
     # Flip horizontally to compensate for panel orientation
     img = img.transpose(Image.FLIP_LEFT_RIGHT)

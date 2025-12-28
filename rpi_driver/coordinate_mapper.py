@@ -37,6 +37,9 @@ class CoordinateMapper:
         self.grid = config['grid']
         self.panels = config['panels']
 
+        # Global display rotation (0, 90, 180, 270)
+        self.display_rotation = config.get('display_rotation', 0)
+
         self.panel_width = self.grid['panel_width']
         self.panel_height = self.grid['panel_height']
         self.grid_width = self.grid['grid_width']
@@ -168,6 +171,7 @@ class CoordinateMapper:
         Map virtual frame to physical LED order
 
         Uses pre-computed lookup table for fast mapping
+        Applies global display rotation before mapping
 
         Args:
             virtual_frame: NumPy array of shape (height, width, 3) with RGB values
@@ -177,6 +181,15 @@ class CoordinateMapper:
             physical_frame: NumPy array of shape (total_leds, 3) in physical LED order
         """
         with self.lock:
+            # Apply global display rotation
+            if self.display_rotation == 90:
+                virtual_frame = np.rot90(virtual_frame, k=1, axes=(0, 1))
+            elif self.display_rotation == 180:
+                virtual_frame = np.rot90(virtual_frame, k=2, axes=(0, 1))
+            elif self.display_rotation == 270:
+                virtual_frame = np.rot90(virtual_frame, k=3, axes=(0, 1))
+            # k=0 or rotation=0 means no rotation
+
             # Validate frame dimensions
             expected_shape = (self.total_height, self.total_width, 3)
             if virtual_frame.shape != expected_shape:
@@ -210,6 +223,7 @@ class CoordinateMapper:
         self.config = config
         self.grid = config['grid']
         self.panels = config['panels']
+        self.display_rotation = config.get('display_rotation', 0)
 
         self.panel_width = self.grid['panel_width']
         self.panel_height = self.grid['panel_height']
