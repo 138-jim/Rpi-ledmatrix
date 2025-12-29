@@ -525,6 +525,78 @@ def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def starry_night(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create starry night pattern with twinkling stars
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset for twinkling
+
+    Returns:
+        Frame array with twinkling stars on black background
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Generate consistent star positions using pseudo-random based on pixel position
+    # This ensures stars stay in the same place across frames
+    num_stars = 80  # Number of stars (adjust for density)
+
+    for star_id in range(num_stars):
+        # Use star_id as seed for consistent positioning
+        # Simple hash function for pseudo-random but consistent positions
+        x = (star_id * 73) % width
+        y = (star_id * 97) % height
+
+        # Star brightness varies with time (twinkling effect)
+        # Different stars twinkle at different rates
+        twinkle_speed = 0.5 + (star_id % 10) * 0.3  # Vary twinkle speed
+        twinkle_phase = (star_id * 0.5) % (2 * math.pi)  # Different phases
+        brightness = 0.5 + 0.5 * math.sin(offset * twinkle_speed + twinkle_phase)
+
+        # Some stars are brighter than others
+        base_brightness = 0.6 + (star_id % 4) * 0.1
+
+        # Final brightness
+        final_brightness = brightness * base_brightness
+
+        # Star color - mostly white, some slightly yellow
+        if star_id % 7 == 0:
+            # Yellow-ish star
+            color = (
+                int(255 * final_brightness),
+                int(255 * final_brightness),
+                int(200 * final_brightness)
+            )
+        else:
+            # White star
+            color = (
+                int(255 * final_brightness),
+                int(255 * final_brightness),
+                int(255 * final_brightness)
+            )
+
+        # Draw star (single pixel)
+        frame[y, x] = color
+
+        # Occasionally draw a slightly bigger/brighter star
+        if star_id % 15 == 0 and final_brightness > 0.7:
+            # Add glow to neighboring pixels
+            for dy in [-1, 0, 1]:
+                for dx in [-1, 0, 1]:
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < height and 0 <= nx < width and (dx != 0 or dy != 0):
+                        glow_intensity = final_brightness * 0.3
+                        frame[ny, nx] = [
+                            min(255, frame[ny, nx][0] + int(255 * glow_intensity)),
+                            min(255, frame[ny, nx][1] + int(255 * glow_intensity)),
+                            min(255, frame[ny, nx][2] + int(255 * glow_intensity))
+                        ]
+
+    return frame
+
+
 # Pattern registry for easy access
 PATTERNS = {
     "red": lambda w, h, o: solid_color(w, h, 255, 0, 0),
@@ -543,6 +615,7 @@ PATTERNS = {
     "panels": lambda w, h, o: panel_numbers(w, h),
     "elapsed": elapsed_time,
     "heart": beating_heart,
+    "starry_night": starry_night,
 }
 
 
