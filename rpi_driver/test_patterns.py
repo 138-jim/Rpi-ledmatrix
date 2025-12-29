@@ -636,12 +636,12 @@ def fireflies(width: int, height: int, offset: float = 0) -> np.ndarray:
             frame[y, x] = [0, brightness // 2, brightness]
 
     # Number of fireflies
-    num_fireflies = 25
+    num_fireflies = 40
 
     for fly_id in range(num_fireflies):
         # Base position with slow drift
-        drift_speed_x = 0.3 + (fly_id % 5) * 0.1
-        drift_speed_y = 0.2 + (fly_id % 7) * 0.08
+        drift_speed_x = 0.3 + (fly_id % 10) * 0.1
+        drift_speed_y = 0.2 + (fly_id % 14) * 0.08
 
         base_x = (fly_id * 67) % width
         base_y = (fly_id * 97) % height
