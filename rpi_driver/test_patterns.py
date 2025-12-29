@@ -1789,21 +1789,21 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
 
         # Launch phase (0-1 sec)
         if cycle_time < 1.0:
-            # Rising rocket
+            # Rising rocket (launches from bottom upward)
             launch_progress = cycle_time
-            rocket_y = height - int(launch_progress * height * 0.6)
+            rocket_y = int(launch_progress * height * 0.6)  # Start at 0 (bottom), rise to 60% of height
             rocket_x = (width // 4) * (fw_id + 1)
 
             if 0 <= rocket_y < height and 0 <= rocket_x < width:
                 frame[rocket_y, rocket_x] = [255, 255, 255]
-                # Trail
-                if rocket_y + 1 < height:
-                    frame[rocket_y + 1, rocket_x] = [150, 150, 150]
+                # Trail below the rocket (lower Y in flipped coords)
+                if rocket_y - 1 >= 0:
+                    frame[rocket_y - 1, rocket_x] = [150, 150, 150]
 
         # Explosion phase (1-4 sec)
         elif cycle_time < 4.0:
             explosion_time = cycle_time - 1.0
-            center_y = height - int(0.6 * height)
+            center_y = int(0.6 * height)  # Explode at 60% height (near top in flipped coords)
             center_x = (width // 4) * (fw_id + 1)
 
             # Firework color
@@ -1821,8 +1821,8 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
                 px = center_x + speed * explosion_time * math.cos(angle)
                 py = center_y + speed * explosion_time * math.sin(angle)
 
-                # Gravity effect
-                py += explosion_time * explosion_time * 2
+                # Gravity effect (pulls particles down toward Y=0)
+                py -= explosion_time * explosion_time * 2
 
                 # Fade out over time
                 fade = 1.0 - (explosion_time / 3.0)
