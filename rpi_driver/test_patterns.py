@@ -1552,8 +1552,9 @@ def starfield(width: int, height: int, offset: float = 0) -> np.ndarray:
             base_x = (star_id * 73) % width
             start_y = (star_id * 97) % height
 
-            # Scroll down
-            star_y = (start_y + offset * speed) % height
+            # Scroll down (flip coordinate so it falls downward visually)
+            star_y_raw = (start_y + int(offset * speed)) % height
+            star_y = height - 1 - star_y_raw
 
             # Brightness varies by layer (closer = brighter)
             brightness = int(100 + layer * 50)
@@ -1602,13 +1603,15 @@ def matrix_rain(width: int, height: int, offset: float = 0) -> np.ndarray:
         speed = 3.0 + (col_x % 5) * 1.5
         phase = (col_x * 2.7) % height
 
-        # Column position
-        col_y = (offset * speed + phase) % (height + 20)
+        # Column position (falls downward - flip coordinate)
+        col_y_raw = (offset * speed + phase) % (height + 20)
+        col_y = height - 1 - (col_y_raw % height)
 
         # Draw trail (fading characters behind the head)
+        # Trail should be above the head (higher Y values after flip)
         trail_length = 8
         for i in range(trail_length):
-            char_y = int(col_y - i)
+            char_y = int(col_y + i)
             if 0 <= char_y < height:
                 # Fade from bright at head to dark at tail
                 intensity = (1.0 - i / trail_length) ** 2
