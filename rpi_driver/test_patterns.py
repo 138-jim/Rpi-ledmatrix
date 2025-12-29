@@ -499,20 +499,23 @@ def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
     # Draw heart shape using parametric equation
     for y in range(height):
         for x in range(width):
-            # Normalize coordinates to [-2, 2] range centered at cx, cy
-            nx = ((x - cx) / (width / 4.0)) / beat
-            ny = ((y - cy) / (height / 4.0)) / beat
+            # Normalize coordinates with vertical stretch for longer point
+            # Shift up slightly to center the elongated heart
+            nx = ((x - cx) / (width / 4.5)) / beat
+            ny = ((y - cy + 1.5) / (height / 5.5)) / beat  # Vertical stretch + shift
 
-            # Heart equation: (x^2 + y^2 - 1)^3 - x^2*y^3 <= 0
-            # Adjusted for LED display
-            heart_eq = (nx * nx + ny * ny - 1) ** 3 - nx * nx * ny * ny * ny
+            # Modified heart equation for deeper dip and longer point
+            # (x^2 + (y - |x|^0.5)^2 - 1)^3 - x^2*y^3 <= 0
+            # Using |x|^0.5 creates a deeper dip at the top
+            y_adj = ny - abs(nx) ** 0.6  # Adjust for dip
+            heart_eq = (nx * nx + y_adj * y_adj - 1) ** 3 - nx * nx * ny * ny * ny * 0.8
 
             if heart_eq <= 0:
                 # Inside heart - full color
                 frame[y, x] = color
-            elif heart_eq <= 0.2:
+            elif heart_eq <= 0.25:
                 # Edge glow
-                intensity = 1.0 - (heart_eq / 0.2)
+                intensity = 1.0 - (heart_eq / 0.25)
                 frame[y, x] = [
                     int(color[0] * intensity),
                     int(color[1] * intensity),
