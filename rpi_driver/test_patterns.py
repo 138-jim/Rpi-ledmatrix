@@ -500,9 +500,9 @@ def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
     for y in range(height):
         for x in range(width):
             # Normalize coordinates with vertical stretch for longer point
-            # Shift up slightly to center the elongated heart
-            nx = ((x - cx) / (width / 4.5)) / beat
-            ny = ((y - cy + 1.5) / (height / 5.5)) / beat  # Vertical stretch + shift
+            # Shift down by 4 pixels from previous position
+            nx = ((x - cx) / (width / 5.5)) / beat  # Decreased horizontal stretch
+            ny = ((y - cy - 2.5) / (height / 5.5)) / beat  # Vertical stretch + shift down
 
             # Modified heart equation for deeper dip and longer point
             # (x^2 + (y - |x|^0.5)^2 - 1)^3 - x^2*y^3 <= 0
