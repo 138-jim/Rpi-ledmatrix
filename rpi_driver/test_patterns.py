@@ -549,24 +549,25 @@ def gradient_waves(width: int, height: int, offset: float = 0) -> np.ndarray:
             wave3 = math.sin((x + y) * 0.15 + offset * 0.3)
             wave4 = math.sin((x - y) * 0.1 + offset * 0.4)
 
-            # Combine waves for different color channels
-            # Red channel: horizontal and diagonal waves
-            red_intensity = (wave1 + wave3) / 2.0
-            red_intensity = (red_intensity + 1.0) / 2.0  # Normalize to 0-1
+            # Combine waves to create hue (color) - full rainbow spectrum
+            combined = (wave1 + wave2 + wave3 + wave4) / 4.0
+            hue = (combined + 1.0) / 2.0  # Normalize to 0-1
 
-            # Green channel: vertical and opposite diagonal waves
-            green_intensity = (wave2 + wave4) / 2.0
-            green_intensity = (green_intensity + 1.0) / 2.0
+            # Use full saturation for vibrant colors (not pastel)
+            saturation = 1.0
 
-            # Blue channel: combination of all waves
-            blue_intensity = (wave1 + wave2 + wave3 + wave4) / 4.0
-            blue_intensity = (blue_intensity + 1.0) / 2.0
+            # Vary brightness slightly based on waves for depth
+            brightness_variation = (wave1 * wave2) * 0.2 + 0.8  # Range: 0.6 to 1.0
+            brightness = max(0.6, min(1.0, brightness_variation))
+
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
 
             # Apply to frame
             frame[y, x] = [
-                int(red_intensity * 255),
-                int(green_intensity * 255),
-                int(blue_intensity * 255)
+                int(r * 255),
+                int(g * 255),
+                int(b * 255)
             ]
 
     return frame
