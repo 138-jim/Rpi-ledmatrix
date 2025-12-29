@@ -728,7 +728,7 @@ def aquarium(width: int, height: int, offset: float = 0) -> np.ndarray:
         # Light blue at top (high depth_factor), darker blue at bottom (low depth_factor)
         blue_intensity = int(100 + depth_factor * 3)  # 100-180
         green_intensity = int(60 + depth_factor * 3)   # 60-100
-        frame[y, :] = [0, green_intensity // 2, blue_intensity // 2]
+        frame[y, :] = [0, green_intensity // 4, blue_intensity // 4]
 
     # Draw seaweed/plants at bottom (Y=0)
     num_plants = 5
