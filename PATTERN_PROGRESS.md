@@ -13,10 +13,10 @@
 2. ✅ Color Gradients - Linear/radial/diagonal color transitions (APPROVED)
 3. ✅ Gradient Waves - Sine wave color interference (APPROVED)
 4. ✅ RGB Torch - Flickering flame colors (APPROVED)
-5. 🟢 Sunset/Sunrise - Color shift animation (TESTING - waiting for user)
+5. ✅ Sunset/Sunrise - Color shift animation (APPROVED) - includes loop version
 
 ### Phase 2: Natural Effects
-6. 🔴 Rain - Falling droplets
+6. 🟢 Rain - Falling droplets (TESTING - waiting for user)
 7. 🔴 Snow - Falling snowflakes
 8. 🔴 Fireflies - Gentle blinking lights
 9. 🔴 Aquarium - Swimming fish

@@ -525,6 +525,93 @@ def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create rain effect with falling droplets and ripples
+
+    Raindrops fall at varying speeds with ripple effects when they hit the ground
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with rain effect
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Dark blue-gray background for rainy atmosphere
+    for y in range(height):
+        for x in range(width):
+            # Gradient from dark at top to slightly lighter at bottom
+            brightness = int(15 + (y / height) * 10)
+            frame[y, x] = [brightness // 2, brightness // 2, brightness]
+
+    # Number of raindrops
+    num_drops = 30
+
+    for drop_id in range(num_drops):
+        # Consistent x position for each drop
+        drop_x = (drop_id * 73) % width
+
+        # Different speeds for different drops
+        speed = 2.0 + (drop_id % 5) * 0.5
+
+        # Calculate drop y position (falls down)
+        drop_y = int((offset * speed + drop_id * 3) % (height + 10)) - 5
+
+        # Draw raindrop (elongated)
+        if 0 <= drop_y < height:
+            # Main drop (bright)
+            frame[drop_y, drop_x] = [180, 200, 255]
+
+            # Trail above drop (dimmer)
+            if drop_y > 0:
+                frame[drop_y - 1, drop_x] = [100, 120, 180]
+            if drop_y > 1:
+                frame[drop_y - 2, drop_x] = [50, 60, 120]
+
+        # Ripple effect when drop hits bottom
+        if drop_y >= height - 2:
+            # Time since hitting ground
+            ripple_time = (drop_y - (height - 2)) + ((offset * speed) % 1.0)
+
+            if ripple_time < 3.0:  # Ripple lasts for 3 frames
+                ripple_radius = int(ripple_time) + 1
+                ripple_intensity = 1.0 - (ripple_time / 3.0)
+
+                # Draw ripple circle at ground level
+                ground_y = height - 1
+                for dx in range(-ripple_radius, ripple_radius + 1):
+                    ripple_x = (drop_x + dx) % width
+                    dist = abs(dx)
+
+                    if dist == ripple_radius:  # On the ripple edge
+                        brightness = int(150 * ripple_intensity)
+                        frame[ground_y, ripple_x] = [
+                            min(255, frame[ground_y, ripple_x][0] + brightness // 2),
+                            min(255, frame[ground_y, ripple_x][1] + brightness // 2),
+                            min(255, frame[ground_y, ripple_x][2] + brightness)
+                        ]
+
+                # Also draw ripple one row up for visibility
+                if ground_y > 0:
+                    for dx in range(-ripple_radius, ripple_radius + 1):
+                        ripple_x = (drop_x + dx) % width
+                        dist = abs(dx)
+
+                        if dist == ripple_radius:
+                            brightness = int(100 * ripple_intensity)
+                            frame[ground_y - 1, ripple_x] = [
+                                min(255, frame[ground_y - 1, ripple_x][0] + brightness // 2),
+                                min(255, frame[ground_y - 1, ripple_x][1] + brightness // 2),
+                                min(255, frame[ground_y - 1, ripple_x][2] + brightness)
+                            ]
+
+    return frame
+
+
 def sunset_sunrise_loop(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create sunset/sunrise animation loop (not synced to real time)
@@ -1103,6 +1190,7 @@ PATTERNS = {
     "rgb_torch": rgb_torch,
     "sunset_sunrise": sunset_sunrise,
     "sunset_sunrise_loop": sunset_sunrise_loop,
+    "rain": rain,
 }
 
 
