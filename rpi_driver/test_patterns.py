@@ -525,6 +525,73 @@ def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def color_gradients(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create smooth cycling color gradient transitions
+
+    Cycles through different gradient types: linear (horizontal, vertical, diagonal),
+    and radial gradients with smooth color transitions
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset for color cycling
+
+    Returns:
+        Frame array with color gradients
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Cycle through different gradient modes every 10 seconds
+    cycle_time = 10.0
+    mode = int((offset / cycle_time) % 4)
+
+    # Color offset for animation
+    color_offset = (offset * 0.1) % 1.0
+
+    if mode == 0:
+        # Horizontal gradient
+        for y in range(height):
+            for x in range(width):
+                hue = (x / width + color_offset) % 1.0
+                r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    elif mode == 1:
+        # Vertical gradient
+        for y in range(height):
+            for x in range(width):
+                hue = (y / height + color_offset) % 1.0
+                r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    elif mode == 2:
+        # Diagonal gradient
+        for y in range(height):
+            for x in range(width):
+                hue = ((x + y) / (width + height) + color_offset) % 1.0
+                r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    else:  # mode == 3
+        # Radial gradient from center
+        cx, cy = width / 2.0, height / 2.0
+        max_dist = math.sqrt(cx * cx + cy * cy)
+
+        for y in range(height):
+            for x in range(width):
+                # Distance from center
+                dx, dy = x - cx, y - cy
+                dist = math.sqrt(dx * dx + dy * dy)
+
+                # Normalize distance and apply color
+                hue = (dist / max_dist + color_offset) % 1.0
+                r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+                frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    return frame
+
+
 def starry_night(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create starry night pattern with twinkling stars
@@ -616,6 +683,7 @@ PATTERNS = {
     "elapsed": elapsed_time,
     "heart": beating_heart,
     "starry_night": starry_night,
+    "color_gradients": color_gradients,
 }
 
 
