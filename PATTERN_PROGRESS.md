@@ -21,10 +21,10 @@
 8. ✅ Fireflies - Gentle blinking lights (APPROVED)
 9. ✅ Aquarium - Swimming fish (APPROVED)
 10. ✅ Ocean Waves - Perlin noise waves (APPROVED)
-11. 🟡 Northern Lights - Aurora effect (IN PROGRESS)
+11. ✅ Northern Lights - Aurora effect (APPROVED)
 
 ### Phase 3: Math/Physics
-12. 🔴 Plasma Effect - Multi-sine wave colors
+12. 🟡 Plasma Effect - Multi-sine wave colors (IN PROGRESS)
 13. 🔴 Perlin Noise Flow - Organic color fields
 14. 🔴 Kaleidoscope - Symmetric mirroring
 15. 🔴 Geometric Patterns - Rotating shapes

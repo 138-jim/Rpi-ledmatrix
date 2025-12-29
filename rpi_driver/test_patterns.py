@@ -1030,6 +1030,72 @@ def northern_lights(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create plasma effect with swirling colors
+
+    Classic demo-scene plasma using multiple sine wave interference
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with plasma effect
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Center coordinates for radial effects
+    cx = width / 2.0
+    cy = height / 2.0
+
+    for y in range(height):
+        for x in range(width):
+            # Multiple sine wave layers create plasma interference
+
+            # Horizontal waves
+            value1 = math.sin(x / 4.0 + offset * 1.5)
+
+            # Vertical waves
+            value2 = math.sin(y / 3.0 + offset * 1.2)
+
+            # Diagonal waves
+            value3 = math.sin((x + y) / 5.0 + offset * 1.0)
+
+            # Radial waves from center
+            dist = math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+            value4 = math.sin(dist / 3.0 + offset * 2.0)
+
+            # Diagonal opposite direction
+            value5 = math.sin((x - y) / 4.0 + offset * 0.8)
+
+            # Circular pattern
+            angle = math.atan2(y - cy, x - cx)
+            value6 = math.sin(angle * 3.0 + offset * 1.5)
+
+            # Combine all values
+            combined = (value1 + value2 + value3 + value4 + value5 + value6) / 6.0
+
+            # Map to hue (0-1 range for HSV)
+            # Normalize from [-1, 1] to [0, 1]
+            hue = (combined + 1.0) / 2.0
+
+            # Add time offset for color cycling
+            hue = (hue + offset * 0.1) % 1.0
+
+            # Full saturation and brightness for vibrant plasma
+            saturation = 1.0
+            brightness = 0.8 + 0.2 * math.sin(offset * 3.0 + x * 0.2 + y * 0.2)
+
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
+
+            frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    return frame
+
+
 def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create rain effect with falling droplets and ripples
@@ -1705,6 +1771,7 @@ PATTERNS = {
     "aquarium": aquarium,
     "ocean_waves": ocean_waves,
     "northern_lights": northern_lights,
+    "plasma": plasma,
 }
 
 
