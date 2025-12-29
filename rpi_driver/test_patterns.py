@@ -1105,54 +1105,62 @@ def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
 
                 # Only draw if bright enough
                 if intensity > 0.05:
-                    # Plasma colors with pink/magenta emphasis
+                    # Plasma colors - RED and BLUE only (no green)
                     if intensity > 0.7:
-                        # Bright white-pink core
+                        # Bright magenta core
                         r = int(255 * intensity)
-                        g = int(200 * intensity)
+                        g = 0
                         b = int(255 * intensity)
                     elif intensity > 0.4:
-                        # Pink-magenta
+                        # Magenta-purple
                         r = int(255 * intensity)
-                        g = int(100 * intensity)
-                        b = int(255 * intensity)
+                        g = 0
+                        b = int(220 * intensity)
                     elif intensity > 0.2:
-                        # Purple-pink
-                        r = int(220 * intensity)
-                        g = int(80 * intensity)
+                        # Purple
+                        r = int(200 * intensity)
+                        g = 0
                         b = int(255 * intensity)
                     else:
                         # Dim purple outer glow
-                        r = int(180 * intensity)
-                        g = int(50 * intensity)
+                        r = int(150 * intensity)
+                        g = 0
                         b = int(200 * intensity)
 
-                    # Draw main arc pixel
+                    # Draw 1-pixel center trail
                     frame[iy, ix] = [
                         min(255, frame[iy, ix][0] + r),
-                        min(255, frame[iy, ix][1] + g),
+                        0,  # No green
                         min(255, frame[iy, ix][2] + b)
                     ]
 
-                    # Add glow around the strand (adjacent pixels)
-                    glow_intensity = intensity * 0.4
-                    if glow_intensity > 0.05:
-                        glow_r = int(r * 0.5)
-                        glow_g = int(g * 0.5)
-                        glow_b = int(b * 0.5)
+                    # Add fading glow around the center trail
+                    # Multiple rings with decreasing intensity
+                    for ring in range(1, 4):  # 3 rings of glow
+                        glow_intensity = intensity * (0.5 / ring)  # Fade with each ring
+                        if glow_intensity > 0.02:
+                            glow_r = int(r * (0.5 / ring))
+                            glow_b = int(b * (0.5 / ring))
 
-                        for glow_dy in [-1, 0, 1]:
-                            for glow_dx in [-1, 0, 1]:
-                                if glow_dx == 0 and glow_dy == 0:
-                                    continue
-                                gx = ix + glow_dx
-                                gy = iy + glow_dy
-                                if 0 <= gx < width and 0 <= gy < height:
-                                    frame[gy, gx] = [
-                                        min(255, frame[gy, gx][0] + glow_r),
-                                        min(255, frame[gy, gx][1] + glow_g),
-                                        min(255, frame[gy, gx][2] + glow_b)
-                                    ]
+                            for glow_dy in range(-ring, ring + 1):
+                                for glow_dx in range(-ring, ring + 1):
+                                    # Skip center pixel (already drawn)
+                                    if glow_dx == 0 and glow_dy == 0:
+                                        continue
+
+                                    # Only draw on the ring perimeter
+                                    dist = max(abs(glow_dx), abs(glow_dy))
+                                    if dist != ring:
+                                        continue
+
+                                    gx = ix + glow_dx
+                                    gy = iy + glow_dy
+                                    if 0 <= gx < width and 0 <= gy < height:
+                                        frame[gy, gx] = [
+                                            min(255, frame[gy, gx][0] + glow_r),
+                                            0,  # No green
+                                            min(255, frame[gy, gx][2] + glow_b)
+                                        ]
 
     # Bright core at center
     core_radius = 2
@@ -1163,12 +1171,12 @@ def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
                 core_x = int(cx + dx)
                 core_y = int(cy + dy)
                 if 0 <= core_x < width and 0 <= core_y < height:
-                    # Pulsing bright core with pink tint
+                    # Pulsing bright core - magenta (red + blue, no green)
                     pulse = 0.8 + 0.2 * math.sin(offset * 4.0)
                     intensity = (1.0 - dist / core_radius) * pulse
                     frame[core_y, core_x] = [
                         min(255, frame[core_y, core_x][0] + int(255 * intensity)),
-                        min(255, frame[core_y, core_x][1] + int(220 * intensity)),
+                        0,  # No green
                         min(255, frame[core_y, core_x][2] + int(255 * intensity))
                     ]
 
