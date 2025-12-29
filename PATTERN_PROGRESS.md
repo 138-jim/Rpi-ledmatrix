@@ -11,8 +11,8 @@
 ### Phase 1: Simple Patterns
 1. ✅ Starry Night - Twinkling stars (APPROVED)
 2. ✅ Color Gradients - Linear/radial/diagonal color transitions (APPROVED)
-3. 🟢 Gradient Waves - Sine wave color interference (TESTING - waiting for user)
-4. 🔴 RGB Torch - Flickering flame colors
+3. ✅ Gradient Waves - Sine wave color interference (APPROVED)
+4. 🟢 RGB Torch - Flickering flame colors (TESTING - waiting for user)
 5. 🔴 Sunset/Sunrise - Color shift animation
 
 ### Phase 2: Natural Effects

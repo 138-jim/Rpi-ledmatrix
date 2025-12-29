@@ -525,6 +525,65 @@ def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def rgb_torch(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create flickering colored flame effect (rainbow torch)
+
+    Similar to fire effect but with cycling rainbow colors instead of
+    traditional fire colors
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with RGB torch effect
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Base hue cycles through rainbow
+    base_hue = (offset * 0.1) % 1.0
+
+    for y in range(height):
+        for x in range(width):
+            # Flame rises from bottom
+            flame_height = (height - y) / height
+
+            # Add noise for flickering using multiple sine waves
+            noise = (math.sin(x * 0.5 + offset * 3) +
+                    math.sin(y * 0.3 + offset * 4) +
+                    math.sin((x + y) * 0.2 + offset * 5)) / 3
+
+            # Intensity decreases with height and varies with noise
+            intensity = max(0, min(1, flame_height + noise * 0.3))
+
+            # Skip very low intensity pixels for torch effect
+            if intensity < 0.1:
+                continue
+
+            # Hue varies slightly across the flame
+            hue_variation = (x / width) * 0.2 - 0.1  # Slight horizontal variation
+            hue = (base_hue + hue_variation) % 1.0
+
+            # Saturation high at base, decreases toward top
+            saturation = 0.8 + (flame_height * 0.2)
+
+            # Brightness based on intensity
+            brightness = intensity
+
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
+
+            frame[y, x] = [
+                int(r * 255),
+                int(g * 255),
+                int(b * 255)
+            ]
+
+    return frame
+
+
 def gradient_waves(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create flowing gradient patterns using sine wave interference
@@ -733,6 +792,7 @@ PATTERNS = {
     "starry_night": starry_night,
     "color_gradients": color_gradients,
     "gradient_waves": gradient_waves,
+    "rgb_torch": rgb_torch,
 }
 
 
