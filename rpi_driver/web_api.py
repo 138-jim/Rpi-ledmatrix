@@ -164,9 +164,9 @@ class PatternGenerator:
 
 class SimulationGenerator:
     """
-    Background thread that runs fluid simulation and generates frames
+    Background thread that runs lava lamp animation and generates frames
 
-    Runs Navier-Stokes fluid simulation at LED panel resolution (32x32)
+    Uses simple sin/cos animated metaballs (based on Shadertoy implementation)
     for optimal performance, streams to WebSocket clients for visualization.
     """
 
@@ -179,7 +179,7 @@ class SimulationGenerator:
             width: LED panel width (32)
             height: LED panel height (32)
         """
-        from .fluid_simulation import FluidSimulation, downsample_frame
+        from .simple_lava_lamp import SimpleLavaLamp
 
         self.frame_queue = frame_queue
         self.width = width
@@ -188,9 +188,8 @@ class SimulationGenerator:
         self.thread = None
         self.frame_count = 0
 
-        # Run simulation at LED panel resolution for performance
-        self.simulation = FluidSimulation(width, height)
-        self.downsample_frame = downsample_frame
+        # Simple lava lamp animation (fast sin/cos based)
+        self.simulation = SimpleLavaLamp(width, height)
 
         # WebSocket subscribers for high-res preview
         self.hires_subscribers = []
@@ -204,15 +203,15 @@ class SimulationGenerator:
         self.running = True
         self.thread = threading.Thread(target=self._simulate_loop, daemon=True)
         self.thread.start()
-        logger.info("Started fluid simulation")
+        logger.info("Started lava lamp animation")
 
     def stop(self) -> None:
-        """Stop fluid simulation"""
+        """Stop lava lamp animation"""
         if self.running:
             self.running = False
             if self.thread:
                 self.thread.join(timeout=1.0)
-            logger.info("Stopped fluid simulation")
+            logger.info("Stopped lava lamp animation")
 
     def _simulate_loop(self) -> None:
         """Main simulation loop (runs in background thread)"""
