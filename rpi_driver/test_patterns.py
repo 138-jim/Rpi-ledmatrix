@@ -545,8 +545,8 @@ def snow(width: int, height: int, offset: float = 0) -> np.ndarray:
     for y in range(height):
         for x in range(width):
             # Slightly lighter than rain for snowy day
-            brightness = int(8 + (y / height) * 2)
-            frame[y, x] = [brightness, brightness, brightness + 5]
+            brightness = int(3 + (y / height) * 2)
+            frame[y, x] = [brightness // 2, brightness // 2, brightness // 2]
 
     # Number of snowflakes
     num_flakes = 40
