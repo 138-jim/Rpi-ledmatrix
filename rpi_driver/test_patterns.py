@@ -558,31 +558,35 @@ def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
         # Different speeds for different drops
         speed = 2.0 + (drop_id % 5) * 0.5
 
-        # Calculate drop y position (falls down)
-        drop_y = int((offset * speed + drop_id * 3) % (height + 10)) - 5
+        # Calculate drop y position (falls down from top to bottom)
+        # Start at top (0) and move toward bottom (height-1)
+        drop_y_raw = int((offset * speed + drop_id * 3) % (height + 10))
+
+        # Flip coordinate so it falls downward visually
+        drop_y = height - 1 - drop_y_raw
 
         # Draw raindrop (elongated)
         if 0 <= drop_y < height:
             # Main drop (bright)
             frame[drop_y, drop_x] = [180, 200, 255]
 
-            # Trail above drop (dimmer)
-            if drop_y > 0:
-                frame[drop_y - 1, drop_x] = [100, 120, 180]
-            if drop_y > 1:
-                frame[drop_y - 2, drop_x] = [50, 60, 120]
+            # Trail behind drop (dimmer) - should be above the drop (higher y value in flipped coords)
+            if drop_y < height - 1:
+                frame[drop_y + 1, drop_x] = [100, 120, 180]
+            if drop_y < height - 2:
+                frame[drop_y + 2, drop_x] = [50, 60, 120]
 
-        # Ripple effect when drop hits bottom
-        if drop_y >= height - 2:
-            # Time since hitting ground
-            ripple_time = (drop_y - (height - 2)) + ((offset * speed) % 1.0)
+        # Ripple effect when drop hits bottom (y near 0 in flipped coords)
+        if drop_y <= 2:
+            # Time since hitting ground (based on how close to y=0)
+            ripple_time = 2 - drop_y + ((offset * speed) % 1.0)
 
             if ripple_time < 3.0:  # Ripple lasts for 3 frames
                 ripple_radius = int(ripple_time) + 1
                 ripple_intensity = 1.0 - (ripple_time / 3.0)
 
-                # Draw ripple circle at ground level
-                ground_y = height - 1
+                # Draw ripple circle at ground level (y=0 is bottom now)
+                ground_y = 0
                 for dx in range(-ripple_radius, ripple_radius + 1):
                     ripple_x = (drop_x + dx) % width
                     dist = abs(dx)
@@ -595,18 +599,18 @@ def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
                             min(255, frame[ground_y, ripple_x][2] + brightness)
                         ]
 
-                # Also draw ripple one row up for visibility
-                if ground_y > 0:
+                # Also draw ripple one row up for visibility (y+1 in flipped coords)
+                if ground_y < height - 1:
                     for dx in range(-ripple_radius, ripple_radius + 1):
                         ripple_x = (drop_x + dx) % width
                         dist = abs(dx)
 
                         if dist == ripple_radius:
                             brightness = int(100 * ripple_intensity)
-                            frame[ground_y - 1, ripple_x] = [
-                                min(255, frame[ground_y - 1, ripple_x][0] + brightness // 2),
-                                min(255, frame[ground_y - 1, ripple_x][1] + brightness // 2),
-                                min(255, frame[ground_y - 1, ripple_x][2] + brightness)
+                            frame[ground_y + 1, ripple_x] = [
+                                min(255, frame[ground_y + 1, ripple_x][0] + brightness // 2),
+                                min(255, frame[ground_y + 1, ripple_x][1] + brightness // 2),
+                                min(255, frame[ground_y + 1, ripple_x][2] + brightness)
                             ]
 
     return frame
