@@ -1543,25 +1543,36 @@ def starfield(width: int, height: int, offset: float = 0) -> np.ndarray:
         darkness = int(2 + (y / height) * 3)
         frame[y, :] = [darkness // 3, darkness // 3, darkness]
 
-    # Create meteors falling at diagonal angle
-    num_meteors = 12
+    # Create meteors with randomized properties
+    num_meteors = 15
     for meteor_id in range(num_meteors):
-        # Each meteor has consistent properties
-        base_x = (meteor_id * 89) % (width + 20)
-        start_y = (meteor_id * 67) % (height + 15)
-        speed = 3.0 + (meteor_id % 4) * 1.5
-        trail_length = 4 + (meteor_id % 3) * 2
+        # Use offset and meteor_id to generate pseudo-random values
+        seed = meteor_id * 97 + int(offset * 2)
 
-        # Meteor moves diagonally (down and to the right)
+        # Random starting position
+        base_x = (seed * 73) % (width + 30)
+        start_y = (seed * 137) % (height + 25)
+
+        # Random speed (2.0 to 6.0)
+        speed = 2.0 + ((seed * 41) % 40) / 10.0
+
+        # Random trail length (3 to 9)
+        trail_length = 3 + ((seed * 23) % 7)
+
+        # Random angle variation
+        angle_factor = 0.3 + ((seed * 17) % 30) / 100.0
+
+        # Meteor moves diagonally
         progress = offset * speed
-        meteor_x = base_x + int(progress * 0.4)  # Horizontal movement
-        meteor_y_raw = (start_y + int(progress)) % (height + 20)
+        meteor_x = base_x + int(progress * angle_factor)
+        meteor_y_raw = (start_y + int(progress)) % (height + 30)
         meteor_y = height - 1 - (meteor_y_raw % height)
 
-        # Color variations (most white, some yellowish, few bluish)
-        if meteor_id % 7 == 0:
+        # Random color variations
+        color_seed = (seed * 13) % 10
+        if color_seed < 2:
             color = [200, 220, 255]  # Blue-white (hot)
-        elif meteor_id % 5 == 0:
+        elif color_seed < 5:
             color = [255, 240, 180]  # Yellow-white
         else:
             color = [255, 255, 255]  # Pure white
@@ -1614,20 +1625,24 @@ def matrix_rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     # Dark background with slight green tint
     frame[:, :] = [0, 5, 0]
 
-    # Create falling columns
+    # Create falling columns with randomized properties
     num_columns = width
     for col_x in range(num_columns):
-        # Each column has different speed and phase
-        speed = 3.0 + (col_x % 5) * 1.5
-        phase = (col_x * 2.7) % height
+        # Use offset and col_x to generate pseudo-random values
+        seed = col_x * 53 + int(offset * 3)
+
+        # Random speed (2.0 to 7.0)
+        speed = 2.0 + ((seed * 31) % 50) / 10.0
+
+        # Random phase offset
+        phase = (seed * 19) % (height + 10)
 
         # Column position (falls downward - flip coordinate)
         col_y_raw = (offset * speed + phase) % (height + 20)
         col_y = height - 1 - (col_y_raw % height)
 
-        # Draw trail (fading characters behind the head)
-        # Trail should be above the head (higher Y values after flip)
-        trail_length = 8
+        # Random trail length (5 to 12)
+        trail_length = 5 + ((seed * 17) % 8)
         for i in range(trail_length):
             char_y = int(col_y + i)
             if 0 <= char_y < height:
@@ -1663,32 +1678,42 @@ def lava_lamp(width: int, height: int, offset: float = 0) -> np.ndarray:
     # Dark background
     frame[:, :] = [10, 0, 20]
 
-    # Metaball positions (moving blobs)
-    num_blobs = 4
+    # Metaball positions with randomized movement
+    num_blobs = 5
     blob_positions = []
 
     for blob_id in range(num_blobs):
-        # Circular motion for each blob
-        phase = blob_id * (2 * math.pi / num_blobs)
-        radius_x = width * 0.3
-        radius_y = height * 0.25
+        # Use pseudo-random motion patterns
+        seed = blob_id * 67 + int(offset * 0.5)
 
-        blob_x = width / 2 + radius_x * math.cos(offset * 0.5 + phase)
-        blob_y = height / 2 + radius_y * math.sin(offset * 0.7 + phase + 0.5)
+        # Random phase and speed
+        phase = ((seed * 41) % 360) * (2 * math.pi / 360)
+        speed_x = 0.3 + ((seed * 23) % 20) / 100.0
+        speed_y = 0.4 + ((seed * 37) % 25) / 100.0
 
-        blob_positions.append((blob_x, blob_y))
+        # Random radius
+        radius_x = width * (0.2 + ((seed * 19) % 20) / 100.0)
+        radius_y = height * (0.15 + ((seed * 29) % 20) / 100.0)
+
+        # Each blob moves in its own random pattern
+        blob_x = width / 2 + radius_x * math.cos(offset * speed_x + phase)
+        blob_y = height / 2 + radius_y * math.sin(offset * speed_y + phase * 1.3)
+
+        # Random blob size
+        blob_size = 25.0 + ((seed * 13) % 20)
+        blob_positions.append((blob_x, blob_y, blob_size))
 
     # Calculate metaball field for each pixel
     for y in range(height):
         for x in range(width):
             # Sum of inverse distances (metaball formula)
             field = 0.0
-            for blob_x, blob_y in blob_positions:
+            for blob_x, blob_y, blob_size in blob_positions:
                 dx = x - blob_x
                 dy = y - blob_y
                 dist_sq = dx * dx + dy * dy
                 if dist_sq > 0.1:  # Avoid division by zero
-                    field += 30.0 / dist_sq
+                    field += blob_size / dist_sq
 
             # Threshold to create blob shape
             if field > 2.0:
@@ -1798,19 +1823,29 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
     # Dark night sky
     frame[:, :] = [0, 0, 10]
 
-    # Multiple fireworks at different stages
-    num_fireworks = 3
+    # Multiple fireworks with randomized properties
+    num_fireworks = 4
     for fw_id in range(num_fireworks):
-        # Each firework has a cycle
-        cycle_offset = fw_id * 3.0
-        cycle_time = (offset + cycle_offset) % 5.0  # 5 second cycle
+        # Use pseudo-random cycle offset
+        seed = fw_id * 79 + int(offset * 0.5)
+        cycle_offset = ((seed * 31) % 50) / 10.0
+
+        # Random cycle duration (3 to 6 seconds)
+        cycle_duration = 3.0 + ((seed * 23) % 30) / 10.0
+        cycle_time = (offset + cycle_offset) % cycle_duration
+
+        # Random launch x position
+        launch_x = 5 + ((seed * 47) % (width - 10))
+
+        # Random explosion height (50% to 75% of height)
+        explosion_height = 0.5 + ((seed * 37) % 25) / 100.0
 
         # Launch phase (0-1 sec)
         if cycle_time < 1.0:
             # Rising rocket (launches from bottom upward)
             launch_progress = cycle_time
-            rocket_y = int(launch_progress * height * 0.6)  # Start at 0 (bottom), rise to 60% of height
-            rocket_x = (width // 4) * (fw_id + 1)
+            rocket_y = int(launch_progress * height * explosion_height)
+            rocket_x = launch_x
 
             if 0 <= rocket_y < height and 0 <= rocket_x < width:
                 frame[rocket_y, rocket_x] = [255, 255, 255]
@@ -1819,21 +1854,25 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
                     frame[rocket_y - 1, rocket_x] = [150, 150, 150]
 
         # Explosion phase (1-4 sec)
-        elif cycle_time < 4.0:
+        elif cycle_time < cycle_duration - 0.5:
             explosion_time = cycle_time - 1.0
-            center_y = int(0.6 * height)  # Explode at 60% height (near top in flipped coords)
-            center_x = (width // 4) * (fw_id + 1)
+            center_y = int(explosion_height * height)
+            center_x = launch_x
 
-            # Firework color
-            hue = (fw_id * 0.33) % 1.0
+            # Random color
+            hue = ((seed * 13) % 100) / 100.0
             r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
             color = [int(r * 255), int(g * 255), int(b * 255)]
 
-            # Particles expanding outward
-            num_particles = 20
+            # Random particle count (15 to 30)
+            num_particles = 15 + ((seed * 19) % 16)
+
+            # Random particle speed (4.0 to 6.5)
+            particle_speed = 4.0 + ((seed * 29) % 25) / 10.0
+
             for particle_id in range(num_particles):
                 angle = (particle_id / num_particles) * 2 * math.pi
-                speed = 5.0
+                speed = particle_speed
 
                 # Particle position
                 px = center_x + speed * explosion_time * math.cos(angle)
