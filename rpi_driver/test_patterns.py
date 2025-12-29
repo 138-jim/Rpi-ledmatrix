@@ -1046,33 +1046,46 @@ def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
-    # Dark background (glass sphere)
-    for y in range(height):
-        for x in range(width):
-            frame[y, x] = [5, 0, 10]  # Very dark purple
+    # Black background
+    # (frame already initialized to zeros = black)
 
     # Center of plasma ball
     cx = width / 2.0
     cy = height / 2.0
 
-    # Create electrical arc tendrils
-    num_arcs = 8
+    # Create electrical arc tendrils with appearing/disappearing behavior
+    num_arcs = 12  # More arcs for variety
     for arc_id in range(num_arcs):
+        # Arc lifetime (some arcs fade in/out)
+        lifetime_phase = (offset * 0.5 + arc_id * 0.8) % 3.0
+
+        # Arc is active for 2 seconds, off for 1 second
+        if lifetime_phase > 2.0:
+            continue  # Arc is not visible
+
+        # Fade in/out at boundaries
+        if lifetime_phase < 0.3:
+            arc_alpha = lifetime_phase / 0.3  # Fade in
+        elif lifetime_phase > 1.7:
+            arc_alpha = (2.0 - lifetime_phase) / 0.3  # Fade out
+        else:
+            arc_alpha = 1.0  # Full brightness
+
         # Each arc has a base angle
         base_angle = (arc_id / num_arcs) * 2 * math.pi
 
         # Arc flickers/moves
         angle_offset = math.sin(offset * 2.0 + arc_id * 0.5) * 0.3
 
-        # Draw arc from center outward
-        max_length = min(width, height) * 0.6
+        # Draw arc from center to edges
+        max_length = max(width, height) * 0.8  # Reach edges
 
         for step in range(int(max_length)):
             # Normalized distance along arc (0 to 1)
             t = step / max_length
 
             # Arc angle with some wobble
-            wobble = math.sin(offset * 3.0 + arc_id + t * 5.0) * 0.15
+            wobble = math.sin(offset * 3.0 + arc_id + t * 5.0) * 0.2
             angle = base_angle + angle_offset + wobble
 
             # Position along arc
@@ -1084,37 +1097,62 @@ def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
 
             if 0 <= ix < width and 0 <= iy < height:
                 # Arc brightness decreases with distance
-                intensity = (1.0 - t) ** 1.5
+                intensity = (1.0 - t) ** 1.2 * arc_alpha
 
                 # Flickering
-                flicker = 0.7 + 0.3 * math.sin(offset * 8.0 + arc_id * 1.2 + t * 10.0)
+                flicker = 0.8 + 0.2 * math.sin(offset * 8.0 + arc_id * 1.2 + t * 10.0)
                 intensity *= flicker
 
                 # Only draw if bright enough
-                if intensity > 0.1:
-                    # Plasma colors: purple/blue/white gradient
+                if intensity > 0.05:
+                    # Plasma colors with pink/magenta emphasis
                     if intensity > 0.7:
-                        # Bright white core
+                        # Bright white-pink core
                         r = int(255 * intensity)
-                        g = int(240 * intensity)
+                        g = int(200 * intensity)
                         b = int(255 * intensity)
                     elif intensity > 0.4:
-                        # Blue-white
-                        r = int(150 * intensity)
-                        g = int(150 * intensity)
+                        # Pink-magenta
+                        r = int(255 * intensity)
+                        g = int(100 * intensity)
+                        b = int(255 * intensity)
+                    elif intensity > 0.2:
+                        # Purple-pink
+                        r = int(220 * intensity)
+                        g = int(80 * intensity)
                         b = int(255 * intensity)
                     else:
-                        # Purple outer glow
-                        r = int(200 * intensity)
+                        # Dim purple outer glow
+                        r = int(180 * intensity)
                         g = int(50 * intensity)
-                        b = int(255 * intensity)
+                        b = int(200 * intensity)
 
-                    # Blend with existing (for arc overlaps)
+                    # Draw main arc pixel
                     frame[iy, ix] = [
                         min(255, frame[iy, ix][0] + r),
                         min(255, frame[iy, ix][1] + g),
                         min(255, frame[iy, ix][2] + b)
                     ]
+
+                    # Add glow around the strand (adjacent pixels)
+                    glow_intensity = intensity * 0.4
+                    if glow_intensity > 0.05:
+                        glow_r = int(r * 0.5)
+                        glow_g = int(g * 0.5)
+                        glow_b = int(b * 0.5)
+
+                        for glow_dy in [-1, 0, 1]:
+                            for glow_dx in [-1, 0, 1]:
+                                if glow_dx == 0 and glow_dy == 0:
+                                    continue
+                                gx = ix + glow_dx
+                                gy = iy + glow_dy
+                                if 0 <= gx < width and 0 <= gy < height:
+                                    frame[gy, gx] = [
+                                        min(255, frame[gy, gx][0] + glow_r),
+                                        min(255, frame[gy, gx][1] + glow_g),
+                                        min(255, frame[gy, gx][2] + glow_b)
+                                    ]
 
     # Bright core at center
     core_radius = 2
@@ -1125,13 +1163,13 @@ def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
                 core_x = int(cx + dx)
                 core_y = int(cy + dy)
                 if 0 <= core_x < width and 0 <= core_y < height:
-                    # Pulsing bright core
+                    # Pulsing bright core with pink tint
                     pulse = 0.8 + 0.2 * math.sin(offset * 4.0)
                     intensity = (1.0 - dist / core_radius) * pulse
                     frame[core_y, core_x] = [
-                        min(255, int(255 * intensity)),
-                        min(255, int(240 * intensity)),
-                        min(255, int(255 * intensity))
+                        min(255, frame[core_y, core_x][0] + int(255 * intensity)),
+                        min(255, frame[core_y, core_x][1] + int(220 * intensity)),
+                        min(255, frame[core_y, core_x][2] + int(255 * intensity))
                     ]
 
     return frame
