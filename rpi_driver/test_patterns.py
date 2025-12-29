@@ -1546,20 +1546,20 @@ def starfield(width: int, height: int, offset: float = 0) -> np.ndarray:
     # Create meteors with randomized properties
     num_meteors = 15
     for meteor_id in range(num_meteors):
-        # Use offset and meteor_id to generate pseudo-random values
-        seed = meteor_id * 97 + int(offset * 2)
+        # Use only meteor_id for consistent pseudo-random properties
+        seed = meteor_id * 97
 
-        # Random starting position
+        # Random starting position (consistent per meteor)
         base_x = (seed * 73) % (width + 30)
         start_y = (seed * 137) % (height + 25)
 
-        # Random speed (2.0 to 6.0)
+        # Random speed (2.0 to 6.0) - consistent per meteor
         speed = 2.0 + ((seed * 41) % 40) / 10.0
 
-        # Random trail length (3 to 9)
+        # Random trail length (3 to 9) - consistent per meteor
         trail_length = 3 + ((seed * 23) % 7)
 
-        # Random angle variation
+        # Random angle variation - consistent per meteor
         angle_factor = 0.3 + ((seed * 17) % 30) / 100.0
 
         # Meteor moves diagonally
@@ -1628,20 +1628,20 @@ def matrix_rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     # Create falling columns with randomized properties
     num_columns = width
     for col_x in range(num_columns):
-        # Use offset and col_x to generate pseudo-random values
-        seed = col_x * 53 + int(offset * 3)
+        # Use only col_x for consistent pseudo-random properties
+        seed = col_x * 53
 
-        # Random speed (2.0 to 7.0)
+        # Random speed (2.0 to 7.0) - consistent per column
         speed = 2.0 + ((seed * 31) % 50) / 10.0
 
-        # Random phase offset
+        # Random phase offset - consistent per column
         phase = (seed * 19) % (height + 10)
 
         # Column position (falls downward - flip coordinate)
         col_y_raw = (offset * speed + phase) % (height + 20)
         col_y = height - 1 - (col_y_raw % height)
 
-        # Random trail length (5 to 12)
+        # Random trail length (5 to 12) - consistent per column
         trail_length = 5 + ((seed * 17) % 8)
         for i in range(trail_length):
             char_y = int(col_y + i)
@@ -1859,18 +1859,18 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
     # Multiple fireworks with randomized properties
     num_fireworks = 4
     for fw_id in range(num_fireworks):
-        # Use pseudo-random cycle offset
-        seed = fw_id * 79 + int(offset * 0.5)
+        # Use only fw_id for consistent pseudo-random properties
+        seed = fw_id * 79
         cycle_offset = ((seed * 31) % 50) / 10.0
 
-        # Random cycle duration (3 to 6 seconds)
+        # Random cycle duration (3 to 6 seconds) - consistent per firework
         cycle_duration = 3.0 + ((seed * 23) % 30) / 10.0
         cycle_time = (offset + cycle_offset) % cycle_duration
 
-        # Random launch x position
+        # Random launch x position - consistent per firework
         launch_x = 5 + ((seed * 47) % (width - 10))
 
-        # Random explosion height (50% to 75% of height)
+        # Random explosion height (50% to 75% of height) - consistent per firework
         explosion_height = 0.5 + ((seed * 37) % 25) / 100.0
 
         # Launch phase (0-1 sec)
