@@ -1032,9 +1032,9 @@ def northern_lights(width: int, height: int, offset: float = 0) -> np.ndarray:
 
 def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
-    Create plasma effect with swirling colors
+    Create plasma ball effect with electrical arcs
 
-    Classic demo-scene plasma using multiple sine wave interference
+    Simulates a plasma ball with lightning tendrils radiating from center
 
     Args:
         width: Frame width (32)
@@ -1042,56 +1042,97 @@ def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
         offset: Animation time offset
 
     Returns:
-        Frame array with plasma effect
+        Frame array with plasma ball effect
     """
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
-    # Center coordinates for radial effects
+    # Dark background (glass sphere)
+    for y in range(height):
+        for x in range(width):
+            frame[y, x] = [5, 0, 10]  # Very dark purple
+
+    # Center of plasma ball
     cx = width / 2.0
     cy = height / 2.0
 
-    for y in range(height):
-        for x in range(width):
-            # Multiple sine wave layers create plasma interference
+    # Create electrical arc tendrils
+    num_arcs = 8
+    for arc_id in range(num_arcs):
+        # Each arc has a base angle
+        base_angle = (arc_id / num_arcs) * 2 * math.pi
 
-            # Horizontal waves
-            value1 = math.sin(x / 4.0 + offset * 1.5)
+        # Arc flickers/moves
+        angle_offset = math.sin(offset * 2.0 + arc_id * 0.5) * 0.3
 
-            # Vertical waves
-            value2 = math.sin(y / 3.0 + offset * 1.2)
+        # Draw arc from center outward
+        max_length = min(width, height) * 0.6
 
-            # Diagonal waves
-            value3 = math.sin((x + y) / 5.0 + offset * 1.0)
+        for step in range(int(max_length)):
+            # Normalized distance along arc (0 to 1)
+            t = step / max_length
 
-            # Radial waves from center
-            dist = math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-            value4 = math.sin(dist / 3.0 + offset * 2.0)
+            # Arc angle with some wobble
+            wobble = math.sin(offset * 3.0 + arc_id + t * 5.0) * 0.15
+            angle = base_angle + angle_offset + wobble
 
-            # Diagonal opposite direction
-            value5 = math.sin((x - y) / 4.0 + offset * 0.8)
+            # Position along arc
+            x = cx + math.cos(angle) * step
+            y = cy + math.sin(angle) * step
 
-            # Circular pattern
-            angle = math.atan2(y - cy, x - cx)
-            value6 = math.sin(angle * 3.0 + offset * 1.5)
+            ix = int(x)
+            iy = int(y)
 
-            # Combine all values
-            combined = (value1 + value2 + value3 + value4 + value5 + value6) / 6.0
+            if 0 <= ix < width and 0 <= iy < height:
+                # Arc brightness decreases with distance
+                intensity = (1.0 - t) ** 1.5
 
-            # Map to hue (0-1 range for HSV)
-            # Normalize from [-1, 1] to [0, 1]
-            hue = (combined + 1.0) / 2.0
+                # Flickering
+                flicker = 0.7 + 0.3 * math.sin(offset * 8.0 + arc_id * 1.2 + t * 10.0)
+                intensity *= flicker
 
-            # Add time offset for color cycling
-            hue = (hue + offset * 0.1) % 1.0
+                # Only draw if bright enough
+                if intensity > 0.1:
+                    # Plasma colors: purple/blue/white gradient
+                    if intensity > 0.7:
+                        # Bright white core
+                        r = int(255 * intensity)
+                        g = int(240 * intensity)
+                        b = int(255 * intensity)
+                    elif intensity > 0.4:
+                        # Blue-white
+                        r = int(150 * intensity)
+                        g = int(150 * intensity)
+                        b = int(255 * intensity)
+                    else:
+                        # Purple outer glow
+                        r = int(200 * intensity)
+                        g = int(50 * intensity)
+                        b = int(255 * intensity)
 
-            # Full saturation and brightness for vibrant plasma
-            saturation = 1.0
-            brightness = 0.8 + 0.2 * math.sin(offset * 3.0 + x * 0.2 + y * 0.2)
+                    # Blend with existing (for arc overlaps)
+                    frame[iy, ix] = [
+                        min(255, frame[iy, ix][0] + r),
+                        min(255, frame[iy, ix][1] + g),
+                        min(255, frame[iy, ix][2] + b)
+                    ]
 
-            # Convert HSV to RGB
-            r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
-
-            frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+    # Bright core at center
+    core_radius = 2
+    for dy in range(-core_radius, core_radius + 1):
+        for dx in range(-core_radius, core_radius + 1):
+            dist = math.sqrt(dx * dx + dy * dy)
+            if dist <= core_radius:
+                core_x = int(cx + dx)
+                core_y = int(cy + dy)
+                if 0 <= core_x < width and 0 <= core_y < height:
+                    # Pulsing bright core
+                    pulse = 0.8 + 0.2 * math.sin(offset * 4.0)
+                    intensity = (1.0 - dist / core_radius) * pulse
+                    frame[core_y, core_x] = [
+                        min(255, int(255 * intensity)),
+                        min(255, int(240 * intensity)),
+                        min(255, int(255 * intensity))
+                    ]
 
     return frame
 
