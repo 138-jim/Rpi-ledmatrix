@@ -1522,6 +1522,322 @@ def draw_circle(frame, cx, cy, radius, color):
         plot_circle_points(cx, cy, x, y)
 
 
+def starfield(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create parallax scrolling starfield
+
+    Multiple layers of stars moving at different speeds for depth effect
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with starfield
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Black background
+    # (already zeros)
+
+    # Multiple star layers with different speeds (parallax)
+    num_layers = 3
+    for layer in range(num_layers):
+        num_stars = 20 + layer * 10
+        speed = 2.0 + layer * 3.0  # Faster layers = closer stars
+
+        for star_id in range(num_stars):
+            # Consistent position per star
+            base_x = (star_id * 73) % width
+            start_y = (star_id * 97) % height
+
+            # Scroll down
+            star_y = (start_y + offset * speed) % height
+
+            # Brightness varies by layer (closer = brighter)
+            brightness = int(100 + layer * 50)
+
+            # Size varies by layer
+            if layer == 2:  # Closest layer
+                # Draw 2x2 star
+                for dy in [0, 1]:
+                    for dx in [0, 1]:
+                        py = int(star_y) + dy
+                        px = base_x + dx
+                        if 0 <= py < height and 0 <= px < width:
+                            frame[py, px] = [brightness, brightness, brightness]
+            else:
+                # Single pixel star
+                py = int(star_y)
+                if 0 <= py < height:
+                    frame[py, base_x] = [brightness, brightness, brightness]
+
+    return frame
+
+
+def matrix_rain(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create Matrix-style falling characters
+
+    Green characters falling at different speeds
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with Matrix rain
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Dark background with slight green tint
+    frame[:, :] = [0, 5, 0]
+
+    # Create falling columns
+    num_columns = width
+    for col_x in range(num_columns):
+        # Each column has different speed and phase
+        speed = 3.0 + (col_x % 5) * 1.5
+        phase = (col_x * 2.7) % height
+
+        # Column position
+        col_y = (offset * speed + phase) % (height + 20)
+
+        # Draw trail (fading characters behind the head)
+        trail_length = 8
+        for i in range(trail_length):
+            char_y = int(col_y - i)
+            if 0 <= char_y < height:
+                # Fade from bright at head to dark at tail
+                intensity = (1.0 - i / trail_length) ** 2
+                green = int(255 * intensity)
+
+                # Brightest pixel at head
+                if i == 0:
+                    frame[char_y, col_x] = [200, 255, 200]  # Bright white-green
+                else:
+                    frame[char_y, col_x] = [0, green, 0]
+
+    return frame
+
+
+def lava_lamp(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create lava lamp effect with metaballs
+
+    Organic blobby shapes using metaball algorithm
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with lava lamp
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Dark background
+    frame[:, :] = [10, 0, 20]
+
+    # Metaball positions (moving blobs)
+    num_blobs = 4
+    blob_positions = []
+
+    for blob_id in range(num_blobs):
+        # Circular motion for each blob
+        phase = blob_id * (2 * math.pi / num_blobs)
+        radius_x = width * 0.3
+        radius_y = height * 0.25
+
+        blob_x = width / 2 + radius_x * math.cos(offset * 0.5 + phase)
+        blob_y = height / 2 + radius_y * math.sin(offset * 0.7 + phase + 0.5)
+
+        blob_positions.append((blob_x, blob_y))
+
+    # Calculate metaball field for each pixel
+    for y in range(height):
+        for x in range(width):
+            # Sum of inverse distances (metaball formula)
+            field = 0.0
+            for blob_x, blob_y in blob_positions:
+                dx = x - blob_x
+                dy = y - blob_y
+                dist_sq = dx * dx + dy * dy
+                if dist_sq > 0.1:  # Avoid division by zero
+                    field += 30.0 / dist_sq
+
+            # Threshold to create blob shape
+            if field > 2.0:
+                # Color based on field strength
+                intensity = min(1.0, (field - 2.0) / 3.0)
+
+                # Lava colors: red-orange-yellow
+                if intensity > 0.7:
+                    r, g, b = 255, 200, 0  # Yellow
+                elif intensity > 0.4:
+                    r, g, b = 255, 100, 0  # Orange
+                else:
+                    r, g, b = 200, 0, 0  # Red
+
+                frame[y, x] = [
+                    int(r * intensity),
+                    int(g * intensity),
+                    int(b * intensity)
+                ]
+
+    return frame
+
+
+def dna_helix(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create rotating DNA double helix
+
+    Two intertwined helical strands with connecting base pairs
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with DNA helix
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Dark background
+    frame[:, :] = [5, 5, 10]
+
+    # Draw helix along vertical axis
+    cx = width / 2.0
+    num_points = height
+
+    for i in range(num_points):
+        y = i
+        progress = i / height
+
+        # Two strands rotating in opposite directions
+        angle1 = progress * 4 * math.pi + offset * 1.5
+        angle2 = angle1 + math.pi  # Opposite side
+
+        # Radius of helix
+        radius = width * 0.25
+
+        # Strand 1 (cyan)
+        x1 = cx + radius * math.cos(angle1)
+        if 0 <= int(x1) < width and 0 <= y < height:
+            frame[y, int(x1)] = [0, 200, 255]
+            # Make strand thicker
+            if int(x1) + 1 < width:
+                frame[y, int(x1) + 1] = [0, 150, 200]
+
+        # Strand 2 (magenta)
+        x2 = cx + radius * math.cos(angle2)
+        if 0 <= int(x2) < width and 0 <= y < height:
+            frame[y, int(x2)] = [255, 0, 200]
+            # Make strand thicker
+            if int(x2) + 1 < width:
+                frame[y, int(x2) + 1] = [200, 0, 150]
+
+        # Base pairs connecting strands (every few rows)
+        if i % 3 == 0:
+            # Draw line between strands
+            x1_int = int(x1)
+            x2_int = int(x2)
+            if x1_int < x2_int:
+                for x in range(x1_int, x2_int + 1):
+                    if 0 <= x < width and 0 <= y < height:
+                        frame[y, x] = [100, 100, 150]
+            else:
+                for x in range(x2_int, x1_int + 1):
+                    if 0 <= x < width and 0 <= y < height:
+                        frame[y, x] = [100, 100, 150]
+
+    return frame
+
+
+def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create fireworks particle system
+
+    Bursts of colored particles exploding and falling
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with fireworks
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Dark night sky
+    frame[:, :] = [0, 0, 10]
+
+    # Multiple fireworks at different stages
+    num_fireworks = 3
+    for fw_id in range(num_fireworks):
+        # Each firework has a cycle
+        cycle_offset = fw_id * 3.0
+        cycle_time = (offset + cycle_offset) % 5.0  # 5 second cycle
+
+        # Launch phase (0-1 sec)
+        if cycle_time < 1.0:
+            # Rising rocket
+            launch_progress = cycle_time
+            rocket_y = height - int(launch_progress * height * 0.6)
+            rocket_x = (width // 4) * (fw_id + 1)
+
+            if 0 <= rocket_y < height and 0 <= rocket_x < width:
+                frame[rocket_y, rocket_x] = [255, 255, 255]
+                # Trail
+                if rocket_y + 1 < height:
+                    frame[rocket_y + 1, rocket_x] = [150, 150, 150]
+
+        # Explosion phase (1-4 sec)
+        elif cycle_time < 4.0:
+            explosion_time = cycle_time - 1.0
+            center_y = height - int(0.6 * height)
+            center_x = (width // 4) * (fw_id + 1)
+
+            # Firework color
+            hue = (fw_id * 0.33) % 1.0
+            r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+            color = [int(r * 255), int(g * 255), int(b * 255)]
+
+            # Particles expanding outward
+            num_particles = 20
+            for particle_id in range(num_particles):
+                angle = (particle_id / num_particles) * 2 * math.pi
+                speed = 5.0
+
+                # Particle position
+                px = center_x + speed * explosion_time * math.cos(angle)
+                py = center_y + speed * explosion_time * math.sin(angle)
+
+                # Gravity effect
+                py += explosion_time * explosion_time * 2
+
+                # Fade out over time
+                fade = 1.0 - (explosion_time / 3.0)
+                if fade > 0:
+                    particle_color = [
+                        int(color[0] * fade),
+                        int(color[1] * fade),
+                        int(color[2] * fade)
+                    ]
+
+                    px_int = int(px)
+                    py_int = int(py)
+                    if 0 <= px_int < width and 0 <= py_int < height:
+                        frame[py_int, px_int] = particle_color
+
+    return frame
+
+
 def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create rain effect with falling droplets and ripples
@@ -2201,6 +2517,11 @@ PATTERNS = {
     "perlin_noise_flow": perlin_noise_flow,
     "kaleidoscope": kaleidoscope,
     "geometric_patterns": geometric_patterns,
+    "starfield": starfield,
+    "matrix_rain": matrix_rain,
+    "lava_lamp": lava_lamp,
+    "dna_helix": dna_helix,
+    "fireworks": fireworks,
 }
 
 
