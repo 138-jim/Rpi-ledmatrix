@@ -1264,7 +1264,7 @@ def perlin_noise_flow(width: int, height: int, offset: float = 0) -> np.ndarray:
 
     # Parameters for noise sampling
     scale = 0.15  # Larger scale = larger features
-    time_scale = 0.3  # Speed of animation
+    time_scale = 0.6  # Speed of animation (2x faster)
 
     for y in range(height):
         for x in range(width):
