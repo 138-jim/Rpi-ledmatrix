@@ -685,32 +685,22 @@ def fireflies(width: int, height: int, offset: float = 0) -> np.ndarray:
             r, g, b = colorsys.hsv_to_rgb(hue, 0.95, brightness)
             color = (int(r * 255), int(g * 255), int(b * 255))
 
-            # Draw firefly with glow
+            # Determine firefly size (2x2 or 1x1)
+            size = 2 if fly_id % 2 == 0 else 1
+
+            # Draw firefly
             if 0 <= fly_y < height and 0 <= fly_x < width:
-                # Bright center
-                frame[fly_y, fly_x] = color
-
-                # Glow around firefly (softer)
-                glow_intensity = brightness * 0.6
-                glow_color = (int(r * 255 * glow_intensity),
-                             int(g * 255 * glow_intensity),
-                             int(b * 255 * glow_intensity))
-
-                # Add glow to adjacent pixels
-                for dy in [-1, 0, 1]:
-                    for dx in [-1, 0, 1]:
-                        if dx == 0 and dy == 0:
-                            continue  # Skip center (already drawn)
-                        glow_x = (fly_x + dx) % width
-                        glow_y = fly_y + dy
-                        if 0 <= glow_y < height:
-                            # Blend with existing pixel
-                            existing = frame[glow_y, glow_x]
-                            frame[glow_y, glow_x] = [
-                                min(255, existing[0] + glow_color[0]),
-                                min(255, existing[1] + glow_color[1]),
-                                min(255, existing[2] + glow_color[2])
-                            ]
+                if size == 2:
+                    # 2x2 firefly (larger, brighter)
+                    for dy in [0, 1]:
+                        for dx in [0, 1]:
+                            pixel_x = (fly_x + dx) % width
+                            pixel_y = fly_y + dy
+                            if 0 <= pixel_y < height:
+                                frame[pixel_y, pixel_x] = color
+                else:
+                    # 1x1 firefly (smaller)
+                    frame[fly_y, fly_x] = color
 
     return frame
 
