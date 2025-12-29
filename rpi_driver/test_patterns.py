@@ -1622,8 +1622,8 @@ def matrix_rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
-    # Dark background with slight green tint
-    frame[:, :] = [0, 5, 0]
+    # Dark background
+    frame[:, :] = [0, 0, 0]
 
     # Create falling columns with randomized properties
     num_columns = width
@@ -1632,7 +1632,7 @@ def matrix_rain(width: int, height: int, offset: float = 0) -> np.ndarray:
         seed = col_x * 53
 
         # Random speed (2.0 to 7.0) - consistent per column
-        speed = 2.0 + ((seed * 31) % 50) / 10.0
+        speed = 2.0 + ((seed * 31) % 50) / 5
 
         # Random phase offset - consistent per column
         phase = (seed * 19) % (height + 10)
