@@ -75,162 +75,6 @@ class PerlinNoise:
 _perlin = PerlinNoise(seed=42)
 
 
-# Lava Lamp Fluid Simulation
-class LavaLampSimulation:
-    """Simplified fluid simulation for lava lamp effect"""
-
-    def __init__(self, sim_width=128, sim_height=128):
-        """Initialize fluid simulation at higher resolution"""
-        self.width = sim_width
-        self.height = sim_height
-
-        # Temperature field (0.0 = cold, 1.0 = hot)
-        self.temperature = np.zeros((sim_height, sim_width), dtype=np.float32)
-
-        # Velocity field (u=horizontal, v=vertical)
-        self.velocity_u = np.zeros((sim_height, sim_width), dtype=np.float32)
-        self.velocity_v = np.zeros((sim_height, sim_width), dtype=np.float32)
-
-        # Density field (blob density)
-        self.density = np.random.random((sim_height, sim_width)).astype(np.float32) * 0.3
-
-        # Add initial blobs
-        for i in range(8):
-            bx = np.random.randint(10, sim_width - 10)
-            by = np.random.randint(10, sim_height - 10)
-            radius = np.random.randint(8, 15)
-            for y in range(max(0, by-radius), min(sim_height, by+radius)):
-                for x in range(max(0, bx-radius), min(sim_width, bx+radius)):
-                    dist = np.sqrt((x - bx)**2 + (y - by)**2)
-                    if dist < radius:
-                        self.density[y, x] = 1.0 - (dist / radius)
-
-        self.time = 0.0
-
-    def step(self, dt=0.05):
-        """Advance simulation by dt seconds"""
-        self.time += dt
-
-        # Heat source at bottom (Y=0 is bottom for display, but height-1 in array)
-        self.temperature[-5:, :] = 1.0  # Hot bottom
-        self.temperature[:5, :] = 0.0   # Cool top
-
-        # Temperature diffusion (heat spreads)
-        diff_rate = 0.001
-        temp_new = self.temperature.copy()
-        temp_new[1:-1, 1:-1] = (
-            self.temperature[1:-1, 1:-1] * (1 - 4 * diff_rate) +
-            (self.temperature[:-2, 1:-1] + self.temperature[2:, 1:-1] +
-             self.temperature[1:-1, :-2] + self.temperature[1:-1, 2:]) * diff_rate
-        )
-        self.temperature = temp_new
-
-        # Buoyancy force (hot rises, cool sinks)
-        buoyancy = 0.5
-        self.velocity_v += (self.temperature - 0.5) * buoyancy * self.density
-
-        # Damping
-        self.velocity_u *= 0.98
-        self.velocity_v *= 0.98
-
-        # Advect density (move blobs with velocity)
-        density_new = self.density.copy()
-        for y in range(1, self.height - 1):
-            for x in range(1, self.width - 1):
-                # Sample velocity
-                vx = self.velocity_u[y, x]
-                vy = self.velocity_v[y, x]
-
-                # Trace back
-                src_x = x - vx * dt * 10
-                src_y = y + vy * dt * 10  # Flip Y for upward = negative array index
-
-                # Clamp
-                src_x = max(0, min(self.width - 1, src_x))
-                src_y = max(0, min(self.height - 1, src_y))
-
-                # Bilinear interpolation
-                x0, x1 = int(src_x), min(int(src_x) + 1, self.width - 1)
-                y0, y1 = int(src_y), min(int(src_y) + 1, self.height - 1)
-                fx, fy = src_x - x0, src_y - y0
-
-                density_new[y, x] = (
-                    self.density[y0, x0] * (1 - fx) * (1 - fy) +
-                    self.density[y0, x1] * fx * (1 - fy) +
-                    self.density[y1, x0] * (1 - fx) * fy +
-                    self.density[y1, x1] * fx * fy
-                )
-
-        self.density = density_new
-
-        # Density diffusion (blobs spread slightly)
-        diff_rate = 0.005
-        density_new = self.density.copy()
-        density_new[1:-1, 1:-1] = (
-            self.density[1:-1, 1:-1] * (1 - 4 * diff_rate) +
-            (self.density[:-2, 1:-1] + self.density[2:, 1:-1] +
-             self.density[1:-1, :-2] + self.density[1:-1, 2:]) * diff_rate
-        )
-        self.density = density_new
-
-    def render(self, out_width, out_height):
-        """Render simulation to output frame"""
-        # Combine temperature and density
-        combined = self.density * (0.3 + self.temperature * 0.7)
-
-        # Downsample to output size
-        if out_width != self.width or out_height != self.height:
-            # Simple box filter downsampling
-            scale_y = self.height / out_height
-            scale_x = self.width / out_width
-            downsampled = np.zeros((out_height, out_width), dtype=np.float32)
-
-            for out_y in range(out_height):
-                for out_x in range(out_width):
-                    src_y_start = int(out_y * scale_y)
-                    src_y_end = int((out_y + 1) * scale_y)
-                    src_x_start = int(out_x * scale_x)
-                    src_x_end = int((out_x + 1) * scale_x)
-                    downsampled[out_y, out_x] = combined[src_y_start:src_y_end, src_x_start:src_x_end].mean()
-
-            combined = downsampled
-
-        # Convert to RGB frame
-        frame = np.zeros((out_height, out_width, 3), dtype=np.uint8)
-        frame[:, :] = [10, 0, 20]  # Dark background
-
-        for y in range(out_height):
-            for x in range(out_width):
-                intensity = combined[y, x]
-                if intensity > 0.15:
-                    # Get temperature at this location
-                    temp_y = int(y * self.height / out_height)
-                    temp_x = int(x * self.width / out_width)
-                    temp = self.temperature[temp_y, temp_x]
-
-                    # Color based on temperature
-                    if temp > 0.7:
-                        r, g, b = 255, int(180 + temp * 75), 0  # Hot yellow
-                    elif temp > 0.4:
-                        r, g, b = 255, int(80 + temp * 120), 0  # Warm orange
-                    elif temp > 0.2:
-                        r, g, b = int(200 + temp * 55), int(temp * 50), 0  # Cool red
-                    else:
-                        r, g, b = int(150 + temp * 100), 0, 0  # Cold dark red
-
-                    frame[y, x] = [
-                        int(r * min(1.0, intensity * 2)),
-                        int(g * min(1.0, intensity * 2)),
-                        int(b * min(1.0, intensity * 2))
-                    ]
-
-        return frame
-
-
-# Global lava lamp simulation instance
-_lava_sim = LavaLampSimulation(sim_width=128, sim_height=128)
-
-
 def solid_color(width: int, height: int, r: int, g: int, b: int) -> np.ndarray:
     """
     Create solid color frame
@@ -1817,11 +1661,10 @@ def matrix_rain(width: int, height: int, offset: float = 0) -> np.ndarray:
 
 def lava_lamp(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
-    Create lava lamp effect with full fluid simulation
+    Create lava lamp effect with physics simulation
 
-    Runs at 128x128 resolution with temperature and velocity fields,
-    then downsamples to display resolution. Heat source at bottom
-    creates buoyancy forces that push hot blobs upward.
+    Simulates actual lava lamp behavior: blobs heat up at bottom, rise,
+    cool at top, and sink back down.
 
     Args:
         width: Frame width (32)
@@ -1829,15 +1672,100 @@ def lava_lamp(width: int, height: int, offset: float = 0) -> np.ndarray:
         offset: Animation time offset
 
     Returns:
-        Frame array with lava lamp (downsampled from 128x128)
+        Frame array with lava lamp
     """
-    global _lava_sim
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
 
-    # Step simulation forward (approximately 30 FPS)
-    _lava_sim.step(dt=0.033)
+    # Dark background
+    frame[:, :] = [10, 0, 20]
 
-    # Render simulation to output resolution
-    frame = _lava_sim.render(width, height)
+    # Simulate blobs with physics
+    num_blobs = 6
+    blob_data = []
+
+    for blob_id in range(num_blobs):
+        # Each blob has its own cycle period
+        blob_seed = blob_id * 137
+        cycle_period = 15.0 + ((blob_seed * 23) % 50) / 10.0  # 15-20 seconds per cycle
+        phase_offset = ((blob_seed * 41) % 100) / 10.0
+
+        # Current position in cycle (0 to 1)
+        cycle_pos = ((offset + phase_offset) / cycle_period) % 1.0
+
+        # Blob oscillates vertically like real lava lamp
+        # Bottom: Y=0-5, Top: Y=height-5 to height
+        if cycle_pos < 0.45:
+            # Rising phase (bottom to top)
+            rise_progress = cycle_pos / 0.45
+            # Ease in-out for smooth motion
+            eased = rise_progress * rise_progress * (3.0 - 2.0 * rise_progress)
+            blob_y = 3 + eased * (height - 6)
+        elif cycle_pos < 0.55:
+            # Pause at top
+            blob_y = height - 3
+        else:
+            # Sinking phase (top to bottom)
+            sink_progress = (cycle_pos - 0.55) / 0.45
+            # Ease in-out for smooth motion
+            eased = sink_progress * sink_progress * (3.0 - 2.0 * sink_progress)
+            blob_y = (height - 3) - eased * (height - 6)
+
+        # Slight horizontal drift
+        drift_offset = ((blob_seed * 19) % width)
+        blob_x = width / 2 + 3 * math.sin(offset * 0.3 + blob_id * 2.1) + (drift_offset % 10) - 5
+
+        # Temperature based on height (hot at bottom, cool at top)
+        temp_factor = 1.0 - (blob_y / height)  # 1.0 at bottom, 0.0 at top
+
+        # Blob size varies slightly with temperature (larger when hot)
+        base_size = 28.0 + ((blob_seed * 17) % 10)
+        blob_size = base_size * (0.9 + temp_factor * 0.2)
+
+        blob_data.append((blob_x, blob_y, blob_size, temp_factor))
+
+    # Calculate metaball field for each pixel
+    for y in range(height):
+        for x in range(width):
+            # Sum of inverse distances (metaball formula)
+            field = 0.0
+            weighted_temp = 0.0
+
+            for blob_x, blob_y, blob_size, temp_factor in blob_data:
+                dx = x - blob_x
+                dy = y - blob_y
+                dist_sq = dx * dx + dy * dy
+                if dist_sq > 0.1:  # Avoid division by zero
+                    contribution = blob_size / dist_sq
+                    field += contribution
+                    weighted_temp += contribution * temp_factor
+
+            # Threshold to create blob shape
+            if field > 2.0:
+                # Average temperature at this pixel
+                avg_temp = weighted_temp / field if field > 0 else 0.5
+
+                # Color based on temperature (hot = yellow/orange, cool = red/dark red)
+                intensity = min(1.0, (field - 2.0) / 3.0)
+
+                # Temperature affects color
+                if avg_temp > 0.7:
+                    # Hot - bright yellow/orange
+                    r, g, b = 255, int(180 + avg_temp * 75), 0
+                elif avg_temp > 0.4:
+                    # Warm - orange
+                    r, g, b = 255, int(80 + avg_temp * 120), 0
+                elif avg_temp > 0.2:
+                    # Cool - red
+                    r, g, b = int(200 + avg_temp * 55), int(avg_temp * 50), 0
+                else:
+                    # Cold - dark red
+                    r, g, b = int(150 + avg_temp * 100), 0, 0
+
+                frame[y, x] = [
+                    int(r * intensity),
+                    int(g * intensity),
+                    int(b * intensity)
+                ]
 
     return frame
 

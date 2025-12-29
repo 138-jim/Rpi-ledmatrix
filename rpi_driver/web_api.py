@@ -9,6 +9,7 @@ import threading
 import queue
 import json
 import time
+import asyncio
 import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -161,6 +162,131 @@ class PatternGenerator:
         return self.current_pattern if self.running else None
 
 
+class SimulationGenerator:
+    """
+    Background thread that runs fluid simulation and generates frames
+
+    Runs high-resolution (128x128) Navier-Stokes fluid simulation,
+    streams to WebSocket clients, and downsamples to LED panel.
+    """
+
+    def __init__(self, frame_queue: queue.Queue, width: int, height: int):
+        """
+        Initialize simulation generator
+
+        Args:
+            frame_queue: Queue to send downsampled frames to LED panel
+            width: Target LED panel width (32)
+            height: Target LED panel height (32)
+        """
+        from .fluid_simulation import FluidSimulation, downsample_frame
+
+        self.frame_queue = frame_queue
+        self.width = width
+        self.height = height
+        self.running = False
+        self.thread = None
+        self.frame_count = 0
+
+        # High-resolution simulation (4x scale)
+        self.simulation = FluidSimulation(width * 4, height * 4)
+        self.downsample_frame = downsample_frame
+
+        # WebSocket subscribers for high-res preview
+        self.hires_subscribers = []
+
+    def start(self) -> None:
+        """Start fluid simulation"""
+        if self.running:
+            self.stop()
+
+        self.frame_count = 0
+        self.running = True
+        self.thread = threading.Thread(target=self._simulate_loop, daemon=True)
+        self.thread.start()
+        logger.info("Started fluid simulation")
+
+    def stop(self) -> None:
+        """Stop fluid simulation"""
+        if self.running:
+            self.running = False
+            if self.thread:
+                self.thread.join(timeout=1.0)
+            logger.info("Stopped fluid simulation")
+
+    def _simulate_loop(self) -> None:
+        """Main simulation loop (runs in background thread)"""
+        try:
+            while self.running:
+                start_time = time.time()
+
+                # Step simulation
+                self.simulation.step()
+
+                # Render high-res frame
+                hires_frame = self.simulation.render_frame()
+
+                # Broadcast to WebSocket subscribers
+                self._broadcast_hires_frame(hires_frame)
+
+                # Downsample for LED panel
+                led_frame = self.downsample_frame(hires_frame, (self.height, self.width))
+
+                # Send to display
+                try:
+                    self.frame_queue.put_nowait(led_frame)
+                except queue.Full:
+                    logger.debug("Frame queue full, dropping simulation frame")
+
+                self.frame_count += 1
+
+                # Maintain 30 FPS
+                elapsed = time.time() - start_time
+                target_time = 1.0 / 30.0
+                if elapsed < target_time:
+                    time.sleep(target_time - elapsed)
+
+        except Exception as e:
+            logger.error(f"Simulation generator error: {e}", exc_info=True)
+        finally:
+            self.running = False
+
+    def _broadcast_hires_frame(self, frame: np.ndarray) -> None:
+        """Send high-res frame to all WebSocket subscribers"""
+        if not self.hires_subscribers:
+            return
+
+        try:
+            from PIL import Image
+            import io
+            import base64
+
+            # Encode as JPEG for efficient transmission
+            img = Image.fromarray(frame)
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=85)
+            jpeg_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+            # Remove disconnected clients
+            dead_clients = []
+            for ws in self.hires_subscribers:
+                try:
+                    # Note: This is called from sync thread, will be wrapped in async
+                    ws._pending_frame = jpeg_data
+                except Exception:
+                    dead_clients.append(ws)
+
+            for ws in dead_clients:
+                self.hires_subscribers.remove(ws)
+
+        except Exception as e:
+            logger.error(f"Error broadcasting frame: {e}")
+
+    def is_running(self) -> bool:
+        """Check if simulation is currently running"""
+        return self.running
+
+
 class WebAPIServer:
     """
     Web API server for LED display control
@@ -203,9 +329,10 @@ class WebAPIServer:
 
         self.config_manager = ConfigManager()
 
-        # Initialize pattern generator
+        # Initialize pattern generator and simulation generator
         width, height = self.mapper.get_dimensions()
         self.pattern_generator = PatternGenerator(frame_queue, width, height)
+        self.simulation_generator = SimulationGenerator(frame_queue, width, height)
 
         # Create FastAPI app
         self.app = FastAPI(title="LED Display Driver API", version="1.0.0")
@@ -390,13 +517,22 @@ class WebAPIServer:
                 if pattern_name not in test_patterns.PATTERNS:
                     raise HTTPException(status_code=400, detail=f"Unknown pattern: {pattern_name}")
 
-                # Start pattern generator
-                self.pattern_generator.start(pattern_name)
+                # Stop any running generator
+                self.pattern_generator.stop()
+                self.simulation_generator.stop()
+
+                # Use simulation for lava_lamp, normal pattern generator for others
+                if pattern_name == "lava_lamp":
+                    self.simulation_generator.start()
+                    message = "Fluid simulation started"
+                else:
+                    self.pattern_generator.start(pattern_name)
+                    message = "Pattern animation started"
 
                 return {
                     "status": "success",
                     "pattern": pattern_name,
-                    "message": "Pattern animation started"
+                    "message": message
                 }
 
             except HTTPException:
@@ -411,6 +547,7 @@ class WebAPIServer:
             """Stop current test pattern animation"""
             try:
                 self.pattern_generator.stop()
+                self.simulation_generator.stop()
                 return {"status": "success", "message": "Pattern stopped"}
 
             except Exception as e:
@@ -643,6 +780,34 @@ class WebAPIServer:
                 if websocket in self.preview_connections:
                     self.preview_connections.remove(websocket)
 
+        # WebSocket for fluid simulation streaming
+        @self.app.websocket("/ws/simulation")
+        async def websocket_simulation(websocket: WebSocket):
+            """WebSocket endpoint for streaming high-res fluid simulation"""
+            await websocket.accept()
+            self.simulation_generator.hires_subscribers.append(websocket)
+            logger.info("Simulation WebSocket client connected")
+
+            try:
+                # Keep connection alive and send frames
+                while True:
+                    # Check if there's a pending frame
+                    if hasattr(websocket, '_pending_frame'):
+                        frame_data = websocket._pending_frame
+                        delattr(websocket, '_pending_frame')
+                        await websocket.send_text(frame_data)
+                    else:
+                        # Small delay to avoid busy waiting
+                        await asyncio.sleep(0.01)
+
+            except WebSocketDisconnect:
+                logger.info("Simulation WebSocket client disconnected")
+            except Exception as e:
+                logger.error(f"Simulation WebSocket error: {e}")
+            finally:
+                if websocket in self.simulation_generator.hires_subscribers:
+                    self.simulation_generator.hires_subscribers.remove(websocket)
+
     def get_app(self) -> FastAPI:
         """Get FastAPI application instance"""
         return self.app
@@ -651,3 +816,4 @@ class WebAPIServer:
         """Shutdown the web API server and cleanup resources"""
         logger.info("Shutting down web API server")
         self.pattern_generator.stop()
+        self.simulation_generator.stop()
