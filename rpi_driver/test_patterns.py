@@ -1306,6 +1306,82 @@ def perlin_noise_flow(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def kaleidoscope(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create kaleidoscope effect with symmetric mirroring
+
+    Rotating colorful patterns with radial symmetry
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with kaleidoscope effect
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Center of kaleidoscope
+    cx = width / 2.0
+    cy = height / 2.0
+
+    # Number of mirror segments (6-fold symmetry)
+    num_segments = 6
+    segment_angle = (2 * math.pi) / num_segments
+
+    # Rotation animation
+    rotation = offset * 0.5
+
+    for y in range(height):
+        for x in range(width):
+            # Convert to polar coordinates relative to center
+            dx = x - cx
+            dy = y - cy
+            dist = math.sqrt(dx * dx + dy * dy)
+            angle = math.atan2(dy, dx)
+
+            # Apply rotation
+            angle += rotation
+
+            # Map to one segment using modulo (create symmetry)
+            segment_angle_pos = angle % segment_angle
+
+            # Mirror every other segment for more complexity
+            segment_id = int(angle / segment_angle) % num_segments
+            if segment_id % 2 == 1:
+                segment_angle_pos = segment_angle - segment_angle_pos
+
+            # Create pattern based on distance and angle within segment
+            # Multiple layers of patterns
+            pattern1 = math.sin(dist * 0.5 + segment_angle_pos * 3 + offset * 0.8) * 0.5 + 0.5
+            pattern2 = math.sin(dist * 0.3 - segment_angle_pos * 5 + offset * 1.2) * 0.5 + 0.5
+            pattern3 = math.sin(dist * 0.8 + segment_angle_pos * 2 - offset * 0.6) * 0.5 + 0.5
+
+            # Combine patterns
+            combined = (pattern1 + pattern2 * 0.7 + pattern3 * 0.5) / 2.2
+
+            # Distance-based brightness falloff
+            brightness_falloff = 1.0 - (dist / (max(width, height) * 0.7))
+            brightness_falloff = max(0.3, min(1.0, brightness_falloff))
+
+            # Color based on angle and distance
+            hue = (segment_angle_pos / segment_angle + dist * 0.02 + offset * 0.1) % 1.0
+
+            # High saturation for vibrant colors
+            saturation = 0.9 + combined * 0.1
+
+            # Brightness varies with pattern
+            brightness = (0.5 + combined * 0.5) * brightness_falloff
+
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
+
+            frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    return frame
+
+
 def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create rain effect with falling droplets and ripples
@@ -1983,6 +2059,7 @@ PATTERNS = {
     "northern_lights": northern_lights,
     "plasma": plasma,
     "perlin_noise_flow": perlin_noise_flow,
+    "kaleidoscope": kaleidoscope,
 }
 
 
