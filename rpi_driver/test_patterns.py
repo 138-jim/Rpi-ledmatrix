@@ -527,107 +527,164 @@ def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
 
 def sunset_sunrise(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
-    Create sunset/sunrise time-lapse color shift animation
+    Create sunset/sunrise animation with sun/moon and real-time sync
 
-    Cycles through different times of day with appropriate color schemes:
-    sunrise, day, sunset, night
+    Syncs to actual time of day (uses system clock) with animated sun/moon,
+    clouds, and stars
 
     Args:
         width: Frame width (32)
         height: Frame height (32)
-        offset: Animation time offset
+        offset: Animation time offset (used for cloud movement and animations)
 
     Returns:
         Frame array with sunset/sunrise effect
     """
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
-    # Cycle through a full day every 20 seconds
-    day_cycle = (offset / 20.0) % 1.0
+    # Use real time of day
+    now = datetime.now()
+    hour = now.hour
+    minute = now.minute
 
+    # Convert time to day_cycle (0.0 = midnight, 0.5 = noon, 1.0 = midnight)
+    day_cycle = (hour + minute / 60.0) / 24.0
+
+    # Determine time of day
+    # Sunrise: 5am-8am (0.208-0.333)
+    # Day: 8am-6pm (0.333-0.75)
+    # Sunset: 6pm-9pm (0.75-0.875)
+    # Night: 9pm-5am (0.875-1.0 and 0.0-0.208)
+
+    # Sun/Moon position (moves across sky from left to right)
+    if 0.208 <= day_cycle < 0.875:  # Sun is up (5am-9pm)
+        # Map to 0-1 across the day
+        sun_progress = (day_cycle - 0.208) / (0.875 - 0.208)
+        sun_x = int(sun_progress * width)
+        # Parabolic arc for sun height
+        sun_y = int(height * 0.8 - (4 * sun_progress * (1 - sun_progress)) * height * 0.5)
+        celestial_body = "sun"
+    else:  # Moon is up
+        # Moon path
+        if day_cycle >= 0.875:
+            moon_progress = (day_cycle - 0.875) / (1.0 - 0.875)
+        else:
+            moon_progress = (day_cycle + (1.0 - 0.875)) / (0.208 + (1.0 - 0.875))
+        moon_x = int(moon_progress * width)
+        moon_y = int(height * 0.8 - (4 * moon_progress * (1 - moon_progress)) * height * 0.5)
+        celestial_body = "moon"
+
+    # Draw sky gradient
     for y in range(height):
-        # Vertical position (0 at bottom, 1 at top)
         v_pos = 1.0 - (y / height)
 
         for x in range(width):
-            if day_cycle < 0.25:
-                # Sunrise (0.0 - 0.25): warm orange/red at bottom, yellow/blue at top
-                phase = day_cycle / 0.25  # 0 to 1
-
+            # Determine colors based on time of day
+            if 0.208 <= day_cycle < 0.333:  # Sunrise (5am-8am)
+                phase = (day_cycle - 0.208) / (0.333 - 0.208)
                 if v_pos < 0.3:
-                    # Bottom: deep orange to bright orange
-                    hue = 0.05 + phase * 0.05  # Orange range
+                    hue = 0.05 + phase * 0.05
                     saturation = 1.0
                     brightness = 0.6 + phase * 0.4
                 elif v_pos < 0.6:
-                    # Middle: orange to yellow
-                    hue = 0.08 + phase * 0.07  # Orange to yellow
+                    hue = 0.08 + phase * 0.07
                     saturation = 0.9 - phase * 0.3
                     brightness = 0.8 + phase * 0.2
                 else:
-                    # Top: light yellow to light blue
-                    hue = 0.15 + phase * 0.4  # Yellow to cyan
+                    hue = 0.15 + phase * 0.4
                     saturation = 0.5 - phase * 0.3
                     brightness = 0.7 + phase * 0.3
 
-            elif day_cycle < 0.5:
-                # Day (0.25 - 0.5): bright blue sky
-                phase = (day_cycle - 0.25) / 0.25
-
+            elif 0.333 <= day_cycle < 0.75:  # Day (8am-6pm)
                 if v_pos < 0.2:
-                    # Horizon: light cyan
                     hue = 0.52
-                    saturation = 0.3 + phase * 0.1
-                    brightness = 0.9 + phase * 0.1
+                    saturation = 0.3
+                    brightness = 0.95
                 else:
-                    # Sky: bright blue
-                    hue = 0.55 + phase * 0.05
-                    saturation = 0.6 + phase * 0.2
-                    brightness = 0.9 + phase * 0.1
+                    hue = 0.55
+                    saturation = 0.7
+                    brightness = 0.95
 
-            elif day_cycle < 0.75:
-                # Sunset (0.5 - 0.75): warm colors return
-                phase = (day_cycle - 0.5) / 0.25
-
+            elif 0.75 <= day_cycle < 0.875:  # Sunset (6pm-9pm)
+                phase = (day_cycle - 0.75) / (0.875 - 0.75)
                 if v_pos < 0.3:
-                    # Bottom: orange to deep red
-                    hue = 0.05 - phase * 0.03  # Orange to red
-                    saturation = 0.9 + phase * 0.1
+                    hue = 0.05 - phase * 0.03
+                    saturation = 0.95
                     brightness = 0.8 - phase * 0.3
                 elif v_pos < 0.6:
-                    # Middle: pink to purple
                     hue = 0.95 - phase * 0.1
-                    saturation = 0.7 + phase * 0.2
+                    saturation = 0.8
                     brightness = 0.7 - phase * 0.2
                 else:
-                    # Top: purple to dark blue
                     hue = 0.7 - phase * 0.1
-                    saturation = 0.6 + phase * 0.2
+                    saturation = 0.7
                     brightness = 0.6 - phase * 0.3
 
-            else:
-                # Night (0.75 - 1.0): deep blue/purple
-                phase = (day_cycle - 0.75) / 0.25
-
+            else:  # Night
                 if v_pos < 0.4:
-                    # Bottom: very dark blue
-                    hue = 0.6 + phase * 0.05
+                    hue = 0.62
                     saturation = 0.8
-                    brightness = 0.1 + phase * 0.1
+                    brightness = 0.15
                 else:
-                    # Top: dark blue to deep purple
-                    hue = 0.65 - phase * 0.05
-                    saturation = 0.7 + phase * 0.1
-                    brightness = 0.2 + phase * 0.1
+                    hue = 0.65
+                    saturation = 0.75
+                    brightness = 0.25
 
-            # Convert HSV to RGB
             r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
+            frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
 
-            frame[y, x] = [
-                int(r * 255),
-                int(g * 255),
-                int(b * 255)
-            ]
+    # Draw stars at night
+    if day_cycle >= 0.875 or day_cycle < 0.208:
+        for star_id in range(40):
+            sx = (star_id * 73) % width
+            sy = (star_id * 97) % (height - 10)  # Keep stars in upper sky
+            if sy < height * 0.7:  # Only upper 70%
+                twinkle = 0.5 + 0.5 * math.sin(offset * (0.5 + star_id % 3) + star_id)
+                brightness = int(200 * twinkle)
+                frame[sy, sx] = [brightness, brightness, brightness]
+
+    # Draw clouds during day
+    if 0.25 <= day_cycle < 0.875:
+        cloud_offset = int(offset * 2) % width
+        for cloud_id in range(3):
+            cx = (cloud_offset + cloud_id * 15) % width
+            cy = 5 + cloud_id * 6
+            # Simple cloud shape
+            for dy in range(-1, 2):
+                for dx in range(-2, 3):
+                    cloud_y = cy + dy
+                    cloud_x = (cx + dx) % width
+                    if 0 <= cloud_y < height:
+                        # White with some transparency
+                        frame[cloud_y, cloud_x] = [
+                            min(255, frame[cloud_y, cloud_x][0] + 80),
+                            min(255, frame[cloud_y, cloud_x][1] + 80),
+                            min(255, frame[cloud_y, cloud_x][2] + 80)
+                        ]
+
+    # Draw sun or moon
+    if celestial_body == "sun":
+        # Draw sun
+        sun_radius = 3
+        for dy in range(-sun_radius, sun_radius + 1):
+            for dx in range(-sun_radius, sun_radius + 1):
+                if dx*dx + dy*dy <= sun_radius*sun_radius:
+                    sy = sun_y + dy
+                    sx = sun_x + dx
+                    if 0 <= sy < height and 0 <= sx < width:
+                        # Bright yellow/orange sun
+                        frame[sy, sx] = [255, 220, 100]
+    else:
+        # Draw moon
+        moon_radius = 2
+        for dy in range(-moon_radius, moon_radius + 1):
+            for dx in range(-moon_radius, moon_radius + 1):
+                if dx*dx + dy*dy <= moon_radius*moon_radius:
+                    my = moon_y + dy
+                    mx = moon_x + dx
+                    if 0 <= my < height and 0 <= mx < width:
+                        # White/pale yellow moon
+                        frame[my, mx] = [240, 240, 200]
 
     return frame
 
