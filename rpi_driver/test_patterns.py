@@ -1524,9 +1524,9 @@ def draw_circle(frame, cx, cy, radius, color):
 
 def starfield(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
-    Create parallax scrolling starfield
+    Create meteor shower effect
 
-    Multiple layers of stars moving at different speeds for depth effect
+    Meteors falling at an angle with glowing trails
 
     Args:
         width: Frame width (32)
@@ -1534,45 +1534,63 @@ def starfield(width: int, height: int, offset: float = 0) -> np.ndarray:
         offset: Animation time offset
 
     Returns:
-        Frame array with starfield
+        Frame array with meteor shower
     """
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
-    # Black background
-    # (already zeros)
+    # Dark night sky with slight gradient
+    for y in range(height):
+        darkness = int(2 + (y / height) * 3)
+        frame[y, :] = [darkness // 3, darkness // 3, darkness]
 
-    # Multiple star layers with different speeds (parallax)
-    num_layers = 3
-    for layer in range(num_layers):
-        num_stars = 20 + layer * 10
-        speed = 2.0 + layer * 3.0  # Faster layers = closer stars
+    # Create meteors falling at diagonal angle
+    num_meteors = 12
+    for meteor_id in range(num_meteors):
+        # Each meteor has consistent properties
+        base_x = (meteor_id * 89) % (width + 20)
+        start_y = (meteor_id * 67) % (height + 15)
+        speed = 3.0 + (meteor_id % 4) * 1.5
+        trail_length = 4 + (meteor_id % 3) * 2
 
-        for star_id in range(num_stars):
-            # Consistent position per star
-            base_x = (star_id * 73) % width
-            start_y = (star_id * 97) % height
+        # Meteor moves diagonally (down and to the right)
+        progress = offset * speed
+        meteor_x = base_x + int(progress * 0.4)  # Horizontal movement
+        meteor_y_raw = (start_y + int(progress)) % (height + 20)
+        meteor_y = height - 1 - (meteor_y_raw % height)
 
-            # Scroll down (flip coordinate so it falls downward visually)
-            star_y_raw = (start_y + int(offset * speed)) % height
-            star_y = height - 1 - star_y_raw
+        # Color variations (most white, some yellowish, few bluish)
+        if meteor_id % 7 == 0:
+            color = [200, 220, 255]  # Blue-white (hot)
+        elif meteor_id % 5 == 0:
+            color = [255, 240, 180]  # Yellow-white
+        else:
+            color = [255, 255, 255]  # Pure white
 
-            # Brightness varies by layer (closer = brighter)
-            brightness = int(100 + layer * 50)
+        # Draw meteor trail (diagonal streak)
+        for i in range(trail_length):
+            # Trail goes up and to the left from meteor head
+            trail_x = (meteor_x - i) % width
+            trail_y = meteor_y + i
 
-            # Size varies by layer
-            if layer == 2:  # Closest layer
-                # Draw 2x2 star
-                for dy in [0, 1]:
-                    for dx in [0, 1]:
-                        py = int(star_y) + dy
-                        px = base_x + dx
-                        if 0 <= py < height and 0 <= px < width:
-                            frame[py, px] = [brightness, brightness, brightness]
-            else:
-                # Single pixel star
-                py = int(star_y)
-                if 0 <= py < height:
-                    frame[py, base_x] = [brightness, brightness, brightness]
+            if 0 <= trail_y < height and 0 <= trail_x < width:
+                # Fade from bright at head to dim at tail
+                fade = (1.0 - i / trail_length) ** 2
+                pixel_color = [
+                    int(color[0] * fade),
+                    int(color[1] * fade),
+                    int(color[2] * fade)
+                ]
+
+                # Brightest pixel at head (i=0)
+                if i == 0:
+                    frame[trail_y, trail_x] = pixel_color
+                else:
+                    # Blend with existing pixel
+                    frame[trail_y, trail_x] = [
+                        min(255, frame[trail_y, trail_x][0] + pixel_color[0]),
+                        min(255, frame[trail_y, trail_x][1] + pixel_color[1]),
+                        min(255, frame[trail_y, trail_x][2] + pixel_color[2])
+                    ]
 
     return frame
 

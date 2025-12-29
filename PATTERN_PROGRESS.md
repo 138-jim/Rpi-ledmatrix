@@ -28,7 +28,7 @@
 13. ✅ Perlin Noise Flow - Organic color fields (APPROVED)
 14. ✅ Kaleidoscope - Symmetric mirroring (APPROVED)
 15. ✅ Geometric Patterns - Rotating shapes (APPROVED)
-16. 🟢 Starfield - Parallax scrolling stars (TESTING)
+16. 🟢 Meteor Shower - Diagonal streaking meteors with trails (TESTING)
 
 ### Phase 4: Advanced Animations
 17. 🟢 Matrix Rain - Falling characters (TESTING)
