@@ -166,7 +166,7 @@ class SimulationGenerator:
     """
     Background thread that runs fluid simulation and generates frames
 
-    Runs high-resolution (128x128) Navier-Stokes fluid simulation,
+    Runs high-resolution (64x64) Navier-Stokes fluid simulation,
     streams to WebSocket clients, and downsamples to LED panel.
     """
 
@@ -188,8 +188,8 @@ class SimulationGenerator:
         self.thread = None
         self.frame_count = 0
 
-        # High-resolution simulation (4x scale)
-        self.simulation = FluidSimulation(width * 4, height * 4)
+        # High-resolution simulation (2x scale for performance)
+        self.simulation = FluidSimulation(width * 2, height * 2)
         self.downsample_frame = downsample_frame
 
         # WebSocket subscribers for high-res preview

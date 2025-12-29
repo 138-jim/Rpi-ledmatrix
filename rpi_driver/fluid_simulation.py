@@ -68,7 +68,7 @@ class FluidSimulation:
         self.gravity = 0.15  # Downward force
 
         # Solver parameters
-        self.solver_iterations = 20  # Jacobi iterations for pressure/diffusion
+        self.solver_iterations = 5  # Jacobi iterations for pressure/diffusion (reduced for performance)
 
         # Blob particles (lava wax)
         self.blobs: List[Blob] = []
@@ -110,8 +110,8 @@ class FluidSimulation:
         # 2. Advect velocity by itself
         self._advect_velocity()
 
-        # 3. Diffuse velocity (viscosity)
-        self._diffuse_velocity()
+        # 3. Skip velocity diffusion for performance (projection smooths the field)
+        # self._diffuse_velocity()
 
         # 4. Project velocity (make incompressible)
         self._project()
