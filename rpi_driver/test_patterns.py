@@ -545,7 +545,7 @@ def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     for y in range(height):
         for x in range(width):
             # Gradient from very dark at top to slightly lighter at bottom
-            brightness = int(3 + (y / height) * 5)
+            brightness = int(3 + (y / height) * 2)
             frame[y, x] = [brightness // 2, brightness // 2, brightness]
 
     # Number of raindrops
