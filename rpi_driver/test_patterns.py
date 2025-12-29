@@ -12,6 +12,69 @@ from typing import Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 
+# Perlin Noise Implementation
+class PerlinNoise:
+    """2D Perlin noise generator"""
+
+    def __init__(self, seed=0):
+        """Initialize with permutation table"""
+        # Permutation table
+        np.random.seed(seed)
+        self.p = np.arange(256, dtype=int)
+        np.random.shuffle(self.p)
+        self.p = np.concatenate([self.p, self.p])  # Duplicate for wrapping
+
+    def fade(self, t):
+        """Fade function: 6t^5 - 15t^4 + 10t^3"""
+        return t * t * t * (t * (t * 6 - 15) + 10)
+
+    def lerp(self, a, b, t):
+        """Linear interpolation"""
+        return a + t * (b - a)
+
+    def grad(self, hash_val, x, y):
+        """Gradient function - convert hash to gradient vector"""
+        # Take the hash value and convert to one of 8 gradient directions
+        h = hash_val & 7
+        u = x if h < 4 else y
+        v = y if h < 4 else x
+        return (u if (h & 1) == 0 else -u) + (v if (h & 2) == 0 else -v)
+
+    def noise(self, x, y):
+        """Generate 2D Perlin noise at coordinates (x, y)"""
+        # Find unit square that contains point
+        X = int(np.floor(x)) & 255
+        Y = int(np.floor(y)) & 255
+
+        # Find relative x, y of point in square
+        x -= np.floor(x)
+        y -= np.floor(y)
+
+        # Compute fade curves
+        u = self.fade(x)
+        v = self.fade(y)
+
+        # Hash coordinates of square corners
+        a = self.p[X] + Y
+        aa = self.p[a]
+        ab = self.p[a + 1]
+        b = self.p[X + 1] + Y
+        ba = self.p[b]
+        bb = self.p[b + 1]
+
+        # Blend results from corners
+        x1 = self.lerp(self.grad(self.p[aa], x, y),
+                       self.grad(self.p[ba], x - 1, y), u)
+        x2 = self.lerp(self.grad(self.p[ab], x, y - 1),
+                       self.grad(self.p[bb], x - 1, y - 1), u)
+
+        return self.lerp(x1, x2, v)
+
+
+# Create global Perlin noise instance
+_perlin = PerlinNoise(seed=42)
+
+
 def solid_color(width: int, height: int, r: int, g: int, b: int) -> np.ndarray:
     """
     Create solid color frame
@@ -1183,6 +1246,66 @@ def plasma(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def perlin_noise_flow(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create flowing organic color fields using Perlin noise
+
+    Smooth, organic color patterns that flow and evolve over time
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with Perlin noise flow
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Parameters for noise sampling
+    scale = 0.15  # Larger scale = larger features
+    time_scale = 0.3  # Speed of animation
+
+    for y in range(height):
+        for x in range(width):
+            # Sample Perlin noise with multiple octaves for detail
+            # Octave 1: Large features
+            noise1 = _perlin.noise(x * scale + offset * time_scale,
+                                   y * scale + offset * time_scale * 0.8)
+
+            # Octave 2: Medium features
+            noise2 = _perlin.noise(x * scale * 2 + offset * time_scale * 1.2,
+                                   y * scale * 2 + offset * time_scale) * 0.5
+
+            # Octave 3: Small features
+            noise3 = _perlin.noise(x * scale * 4 + offset * time_scale * 0.7,
+                                   y * scale * 4 + offset * time_scale * 1.5) * 0.25
+
+            # Combine octaves
+            combined_noise = noise1 + noise2 + noise3
+
+            # Normalize to 0-1 range (Perlin noise returns roughly -1 to 1)
+            value = (combined_noise + 1.75) / 3.5  # Adjusted for 3 octaves
+            value = max(0.0, min(1.0, value))
+
+            # Create flowing hue from noise
+            # Use second noise sample for color variation
+            hue_noise = _perlin.noise(x * scale * 0.5 - offset * time_scale * 0.5,
+                                      y * scale * 0.5 + offset * time_scale * 0.3)
+            hue = (hue_noise + value + offset * 0.05) % 1.0
+
+            # Saturation and brightness from noise
+            saturation = 0.7 + value * 0.3  # High saturation for vibrant colors
+            brightness = 0.5 + value * 0.5  # Variable brightness
+
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
+
+            frame[y, x] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    return frame
+
+
 def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create rain effect with falling droplets and ripples
@@ -1859,6 +1982,7 @@ PATTERNS = {
     "ocean_waves": ocean_waves,
     "northern_lights": northern_lights,
     "plasma": plasma,
+    "perlin_noise_flow": perlin_noise_flow,
 }
 
 
