@@ -468,6 +468,59 @@ def elapsed_time(width: int, height: int, offset: float = 0) -> np.ndarray:
 
     return frame
 
+def beating_heart(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create a beating heart pattern
+
+    Args:
+        width: Frame width
+        height: Frame height
+        offset: Animation offset for beating effect
+
+    Returns:
+        Frame array with beating heart
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Center of the display
+    cx = width / 2.0
+    cy = height / 2.0
+
+    # Beating effect: scale oscillates between 0.8 and 1.2
+    beat = 1.0 + 0.2 * math.sin(offset * 3.0)
+
+    # Heart color (red with some variation)
+    base_hue = 0.0  # Red
+    hue_variation = math.sin(offset * 0.5) * 0.05
+    hue = base_hue + hue_variation
+    r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+    color = (int(r * 255), int(g * 255), int(b * 255))
+
+    # Draw heart shape using parametric equation
+    for y in range(height):
+        for x in range(width):
+            # Normalize coordinates to [-2, 2] range centered at cx, cy
+            nx = ((x - cx) / (width / 4.0)) / beat
+            ny = ((y - cy) / (height / 4.0)) / beat
+
+            # Heart equation: (x^2 + y^2 - 1)^3 - x^2*y^3 <= 0
+            # Adjusted for LED display
+            heart_eq = (nx * nx + ny * ny - 1) ** 3 - nx * nx * ny * ny * ny
+
+            if heart_eq <= 0:
+                # Inside heart - full color
+                frame[y, x] = color
+            elif heart_eq <= 0.2:
+                # Edge glow
+                intensity = 1.0 - (heart_eq / 0.2)
+                frame[y, x] = [
+                    int(color[0] * intensity),
+                    int(color[1] * intensity),
+                    int(color[2] * intensity)
+                ]
+
+    return frame
+
 
 # Pattern registry for easy access
 PATTERNS = {
@@ -486,6 +539,7 @@ PATTERNS = {
     "grid": lambda w, h, o: grid_lines(w, h),
     "panels": lambda w, h, o: panel_numbers(w, h),
     "elapsed": elapsed_time,
+    "heart": beating_heart,
 }
 
 
