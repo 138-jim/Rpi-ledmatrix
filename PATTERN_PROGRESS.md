@@ -20,8 +20,8 @@
 7. ✅ Snow - Falling snowflakes (APPROVED)
 8. ✅ Fireflies - Gentle blinking lights (APPROVED)
 9. ✅ Aquarium - Swimming fish (APPROVED)
-10. 🟡 Ocean Waves - Perlin noise waves (IN PROGRESS)
-11. 🔴 Northern Lights - Aurora effect
+10. ✅ Ocean Waves - Perlin noise waves (APPROVED)
+11. 🟡 Northern Lights - Aurora effect (IN PROGRESS)
 
 ### Phase 3: Math/Physics
 12. 🔴 Plasma Effect - Multi-sine wave colors

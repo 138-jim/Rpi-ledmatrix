@@ -925,6 +925,111 @@ def ocean_waves(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def northern_lights(width: int, height: int, offset: float = 0) -> np.ndarray:
+    """
+    Create northern lights (aurora borealis) effect
+
+    Flowing vertical curtains of green and purple light with shimmer
+
+    Args:
+        width: Frame width (32)
+        height: Frame height (32)
+        offset: Animation time offset
+
+    Returns:
+        Frame array with aurora effect
+    """
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    # Dark night sky background with stars
+    for y in range(height):
+        for x in range(width):
+            # Very dark background
+            frame[y, x] = [0, 0, 5]
+
+    # Add stars
+    num_stars = 30
+    for star_id in range(num_stars):
+        star_x = (star_id * 73) % width
+        star_y = (star_id * 97) % height
+
+        # Only show stars in upper half (aurora is typically lower in sky)
+        if star_y > height // 2:
+            # Twinkling
+            twinkle = 0.3 + 0.7 * abs(math.sin(offset * 2.0 + star_id * 0.3))
+            brightness = int(200 * twinkle)
+            frame[star_y, star_x] = [brightness, brightness, brightness]
+
+    # Create aurora curtains using vertical waves
+    for x in range(width):
+        # Multiple wave layers for aurora curtains
+        # Wave 1: Main flowing curtain
+        wave1 = math.sin(x * 0.4 + offset * 1.5) * 8.0
+        wave2 = math.sin(x * 0.6 - offset * 1.2) * 5.0
+        wave3 = math.sin(x * 0.3 + offset * 0.8) * 6.0
+
+        # Combine waves to get curtain position and intensity
+        curtain_center = height * 0.4 + wave1 + wave2 + wave3
+
+        # Secondary curtain
+        wave4 = math.sin(x * 0.5 + offset * 1.0 + 2.0) * 7.0
+        wave5 = math.sin(x * 0.35 - offset * 1.3 + 1.5) * 4.0
+        curtain2_center = height * 0.5 + wave4 + wave5
+
+        # Draw vertical aurora columns
+        for y in range(height):
+            # Distance from curtain centers
+            dist1 = abs(y - curtain_center)
+            dist2 = abs(y - curtain2_center)
+
+            # Aurora intensity based on distance (Gaussian-like falloff)
+            intensity1 = max(0, 1.0 - (dist1 / 8.0))
+            intensity2 = max(0, 1.0 - (dist2 / 7.0))
+
+            # Shimmer effect
+            shimmer = 0.7 + 0.3 * math.sin(offset * 4.0 + x * 0.2 + y * 0.1)
+
+            # Color variations
+            # Primary curtain: Green (main aurora color)
+            if intensity1 > 0.1:
+                color_shift = math.sin(offset * 0.5 + x * 0.1)
+                if color_shift > 0.3:
+                    # More yellow-green
+                    r1 = int(intensity1 * shimmer * 40)
+                    g1 = int(intensity1 * shimmer * 255)
+                    b1 = int(intensity1 * shimmer * 80)
+                else:
+                    # Pure green
+                    r1 = int(intensity1 * shimmer * 10)
+                    g1 = int(intensity1 * shimmer * 255)
+                    b1 = int(intensity1 * shimmer * 50)
+
+                # Blend with existing
+                frame[y, x] = [
+                    min(255, frame[y, x][0] + r1),
+                    min(255, frame[y, x][1] + g1),
+                    min(255, frame[y, x][2] + b1)
+                ]
+
+            # Secondary curtain: Purple/Pink
+            if intensity2 > 0.1:
+                shimmer2 = 0.6 + 0.4 * math.sin(offset * 3.5 + x * 0.15 + y * 0.12)
+
+                # Purple/magenta aurora
+                r2 = int(intensity2 * shimmer2 * 200)
+                g2 = int(intensity2 * shimmer2 * 50)
+                b2 = int(intensity2 * shimmer2 * 180)
+
+                # Blend with existing
+                frame[y, x] = [
+                    min(255, frame[y, x][0] + r2),
+                    min(255, frame[y, x][1] + g2),
+                    min(255, frame[y, x][2] + b2)
+                ]
+
+    return frame
+
+
 def rain(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
     Create rain effect with falling droplets and ripples
@@ -1599,6 +1704,7 @@ PATTERNS = {
     "fireflies": fireflies,
     "aquarium": aquarium,
     "ocean_waves": ocean_waves,
+    "northern_lights": northern_lights,
 }
 
 
