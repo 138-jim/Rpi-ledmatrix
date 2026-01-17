@@ -5,6 +5,59 @@ let currentConfig = null;
 // API base URL
 const API_BASE = window.location.origin;
 
+// Enhanced console logging with timestamps
+function logInfo(message, data = null) {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] INFO: ${message}`, data || '');
+}
+
+function logError(message, error = null) {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] ERROR: ${message}`);
+    if (error) {
+        console.error('Error details:', error);
+        if (error.stack) {
+            console.error('Stack trace:', error.stack);
+        }
+    }
+}
+
+function logWarning(message, data = null) {
+    const timestamp = new Date().toISOString();
+    console.warn(`[${timestamp}] WARNING: ${message}`, data || '');
+}
+
+// Helper to extract detailed error info from response
+async function getErrorDetails(response) {
+    try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            return {
+                status: response.status,
+                statusText: response.statusText,
+                detail: errorData.detail || errorData.message || JSON.stringify(errorData),
+                fullError: errorData
+            };
+        } else {
+            const text = await response.text();
+            return {
+                status: response.status,
+                statusText: response.statusText,
+                detail: text || 'No error details available',
+                fullError: text
+            };
+        }
+    } catch (e) {
+        return {
+            status: response.status,
+            statusText: response.statusText,
+            detail: 'Could not parse error response',
+            parseError: e.message
+        };
+    }
+}
+
 // Update clock display
 function updateClock() {
     const now = new Date();
@@ -124,25 +177,46 @@ async function savePowerLimit() {
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('LED Display Driver UI loaded');
+    logInfo('🚀 LED Display Driver UI loaded');
+    logInfo(`API Base URL: ${API_BASE}`);
+    logInfo(`Browser: ${navigator.userAgent}`);
+
+    // Initial data loads
+    logInfo('Loading initial configuration...');
     refreshConfig();
     refreshStatus();
     loadSleepSchedule();
     loadPowerLimit();
-    updateClock();  // Initial clock update
-    refreshHardwareStats();  // Initial hardware stats update
+    updateClock();
+    refreshHardwareStats();
 
-    // Auto-refresh status every 2 seconds
-    setInterval(refreshStatus, 2000);
+    // Setup auto-refresh intervals
+    logInfo('Setting up auto-refresh intervals');
+    setInterval(refreshStatus, 2000);           // Status every 2s
+    setInterval(loadSleepSchedule, 30000);      // Sleep schedule every 30s
+    setInterval(updateClock, 1000);             // Clock every 1s
+    setInterval(refreshHardwareStats, 2000);    // Hardware stats every 2s
 
-    // Auto-refresh sleep schedule every 30 seconds
-    setInterval(loadSleepSchedule, 30000);
+    logInfo('✅ UI initialization complete');
 
-    // Update clock every second
-    setInterval(updateClock, 1000);
+    // Log unhandled errors
+    window.addEventListener('error', (event) => {
+        logError('Unhandled error in window', {
+            message: event.message,
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+            error: event.error
+        });
+    });
 
-    // Update hardware stats every 2 seconds
-    setInterval(refreshHardwareStats, 2000);
+    // Log unhandled promise rejections
+    window.addEventListener('unhandledrejection', (event) => {
+        logError('Unhandled promise rejection', {
+            reason: event.reason,
+            promise: event.promise
+        });
+    });
 });
 
 // Load and display configuration
@@ -275,26 +349,35 @@ async function saveConfig() {
 // Display test pattern
 async function testPattern(patternName) {
     try {
+        logInfo(`Starting pattern: ${patternName}`);
+
+        const requestData = {
+            pattern: patternName,
+            duration: 0
+        };
+
+        logInfo('Sending request to /api/test-pattern', requestData);
+
         const response = await fetch(`${API_BASE}/api/test-pattern`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                pattern: patternName,
-                duration: 0
-            })
+            body: JSON.stringify(requestData)
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || `HTTP ${response.status}`);
+            const errorDetails = await getErrorDetails(response);
+            logError(`Pattern request failed (${errorDetails.status} ${errorDetails.statusText})`, errorDetails);
+            throw new Error(errorDetails.detail || `HTTP ${errorDetails.status}`);
         }
 
+        const result = await response.json();
+        logInfo(`Pattern started successfully: ${patternName}`, result);
         showStatus(`Pattern started: ${patternName}`, 'success');
 
     } catch (error) {
-        console.error('Error displaying pattern:', error);
+        logError(`Error displaying pattern: ${patternName}`, error);
         showStatus(`Error displaying pattern: ${error.message}`, 'error');
     }
 }
@@ -452,6 +535,10 @@ function updateBrightnessDisplay(value) {
     document.getElementById('brightnessValue').textContent = value;
 }
 
+// Track FPS history for freeze detection
+let fpsHistory = [];
+let lastFpsWarning = 0;
+
 // Refresh system status
 async function refreshStatus() {
     try {
@@ -468,6 +555,39 @@ async function refreshStatus() {
         document.getElementById('heightValue').textContent = status.height;
         document.getElementById('currentBrightness').textContent = status.brightness;
 
+        // Track FPS and detect freezes
+        fpsHistory.push(status.fps);
+        if (fpsHistory.length > 10) fpsHistory.shift(); // Keep last 10 samples
+
+        // Check for performance issues
+        const avgFps = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+        const now = Date.now();
+
+        if (avgFps < 10 && now - lastFpsWarning > 5000) { // Warn every 5 seconds max
+            logWarning(`⚠️ Low FPS detected: ${avgFps.toFixed(1)} FPS (target: 30 FPS)`, {
+                current_fps: status.fps,
+                average_fps: avgFps,
+                queue_size: status.queue_size
+            });
+            lastFpsWarning = now;
+        }
+
+        if (status.fps === 0 && now - lastFpsWarning > 5000) {
+            logError('🔴 Display appears frozen (0 FPS)', {
+                queue_size: status.queue_size,
+                brightness: status.brightness
+            });
+            lastFpsWarning = now;
+        }
+
+        // Log queue buildup
+        if (status.queue_size >= 8) {
+            logWarning('Queue near full', {
+                queue_size: status.queue_size,
+                fps: status.fps
+            });
+        }
+
         // Update brightness slider if significantly different
         const currentSlider = parseInt(document.getElementById('brightness').value);
         if (Math.abs(currentSlider - status.brightness) > 5) {
@@ -476,7 +596,7 @@ async function refreshStatus() {
         }
 
     } catch (error) {
-        console.error('Error refreshing status:', error);
+        logError('Error refreshing status', error);
         // Don't show error message for status updates to avoid spam
     }
 }
