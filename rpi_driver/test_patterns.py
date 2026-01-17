@@ -1837,11 +1837,318 @@ def dna_helix(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+def _select_burst_type(seed: int) -> str:
+    """
+    Select firework burst type based on seed
+
+    Args:
+        seed: Deterministic seed value
+
+    Returns:
+        Burst type: 'peony', 'willow', 'palm', or 'ring'
+    """
+    type_index = ((seed * 41) % 100)
+    if type_index < 25:
+        return 'peony'  # 25% - basic spherical
+    elif type_index < 50:
+        return 'willow'  # 25% - drooping trails
+    elif type_index < 75:
+        return 'palm'    # 25% - thick arcing trails
+    else:
+        return 'ring'    # 25% - expanding rings
+
+
+def _select_color_effect(seed: int) -> str:
+    """
+    Select firework color effect based on seed
+
+    Args:
+        seed: Deterministic seed value
+
+    Returns:
+        Color effect: 'solid', 'multicolor', 'changing', or 'glitter'
+    """
+    effect_index = ((seed * 53) % 100)
+    if effect_index < 25:
+        return 'solid'      # 25% - single color
+    elif effect_index < 50:
+        return 'multicolor' # 25% - rainbow
+    elif effect_index < 75:
+        return 'changing'   # 25% - color shift over time
+    else:
+        return 'glitter'    # 25% - sparkles
+
+
+def _select_special_effect(seed: int) -> str:
+    """
+    Select firework special effect based on seed
+
+    Args:
+        seed: Deterministic seed value
+
+    Returns:
+        Special effect: 'none', 'crossette', 'strobe', or 'trail'
+    """
+    effect_index = ((seed * 67) % 100)
+    if effect_index < 40:
+        return 'none'      # 40% - basic particles (higher probability for simpler fireworks)
+    elif effect_index < 60:
+        return 'crossette' # 20% - secondary bursts
+    elif effect_index < 80:
+        return 'strobe'    # 20% - pulsing
+    else:
+        return 'trail'     # 20% - comet tails
+
+
+def _get_particle_color(base_hue: float, particle_id: int, num_particles: int,
+                       explosion_time: float, color_effect: str, seed: int,
+                       offset: float) -> tuple:
+    """
+    Calculate particle color based on color effect type
+
+    Args:
+        base_hue: Base hue value (0.0-1.0)
+        particle_id: Index of particle
+        num_particles: Total number of particles
+        explosion_time: Time since explosion started
+        color_effect: Type of color effect ('solid', 'multicolor', 'changing', 'glitter')
+        seed: Seed for deterministic randomness
+        offset: Animation offset for glitter timing
+
+    Returns:
+        (r, g, b) color tuple
+    """
+    if color_effect == 'solid':
+        # Single solid color
+        hue = base_hue
+        saturation = 1.0
+        brightness = 1.0
+
+    elif color_effect == 'multicolor':
+        # Rainbow - each particle gets different hue
+        hue = (particle_id / num_particles) % 1.0
+        saturation = 1.0
+        brightness = 1.0
+
+    elif color_effect == 'changing':
+        # Color shifts over time
+        hue = (base_hue + (explosion_time * 0.3)) % 1.0
+        saturation = 1.0
+        brightness = 1.0
+
+    elif color_effect == 'glitter':
+        # Random sparkles - some particles get brightness boost
+        hue = base_hue
+        saturation = 1.0
+        # Deterministic sparkle timing
+        sparkle_check = ((seed + particle_id + int(offset * 10)) % 7)
+        brightness = 2.0 if sparkle_check == 0 else 1.0
+
+    else:
+        hue = base_hue
+        saturation = 1.0
+        brightness = 1.0
+
+    # Convert to RGB
+    r, g, b = colorsys.hsv_to_rgb(hue, saturation, brightness)
+    return (int(r * 255), int(g * 255), int(b * 255))
+
+
+def _apply_burst_physics(center_x: float, center_y: float, angle: float,
+                        speed: float, explosion_time: float, burst_type: str,
+                        particle_id: int, num_particles: int) -> tuple:
+    """
+    Apply physics based on burst type
+
+    Args:
+        center_x: Explosion center X coordinate
+        center_y: Explosion center Y coordinate
+        angle: Particle launch angle
+        speed: Particle speed
+        explosion_time: Time since explosion
+        burst_type: Type of burst ('peony', 'willow', 'palm', 'ring')
+        particle_id: Index of particle
+        num_particles: Total number of particles
+
+    Returns:
+        (px, py) particle position tuple
+    """
+    if burst_type == 'peony':
+        # Standard spherical burst
+        px = center_x + speed * explosion_time * math.cos(angle)
+        py = center_y + speed * explosion_time * math.sin(angle)
+        # Standard gravity
+        py -= explosion_time * explosion_time * 2
+
+    elif burst_type == 'willow':
+        # Drooping trails with stronger gravity
+        px = center_x + speed * explosion_time * math.cos(angle)
+        py = center_y + speed * explosion_time * math.sin(angle)
+        # Stronger gravity (3x) and downward velocity bias
+        py -= explosion_time * explosion_time * 6
+        py -= explosion_time * 3
+
+    elif burst_type == 'palm':
+        # Thick arcing trails, more vertical
+        # Bias angle toward vertical
+        vertical_bias = 0.3 * math.pi * math.sin(angle)
+        biased_angle = angle + vertical_bias
+        px = center_x + speed * explosion_time * math.cos(biased_angle) * 0.7
+        py = center_y + speed * explosion_time * math.sin(biased_angle)
+        # Moderate gravity
+        py -= explosion_time * explosion_time * 3
+
+    elif burst_type == 'ring':
+        # Expanding concentric rings
+        # Particles at discrete radii
+        ring_index = particle_id % 3  # 3 rings
+        ring_radius = (ring_index + 1) * speed * explosion_time * 0.8
+        px = center_x + ring_radius * math.cos(angle)
+        py = center_y + ring_radius * math.sin(angle)
+        # Light gravity
+        py -= explosion_time * explosion_time * 1.5
+
+    else:
+        # Default to peony
+        px = center_x + speed * explosion_time * math.cos(angle)
+        py = center_y + speed * explosion_time * math.sin(angle)
+        py -= explosion_time * explosion_time * 2
+
+    return (px, py)
+
+
+def _render_particle_with_effects(frame: np.ndarray, px: float, py: float,
+                                  base_color: tuple, fade: float, explosion_time: float,
+                                  special_effect: str, seed: int, particle_id: int,
+                                  angle: float, speed: float, offset: float,
+                                  width: int, height: int, burst_type: str) -> None:
+    """
+    Render particle with special effects
+
+    Args:
+        frame: Frame array to draw on
+        px, py: Particle position
+        base_color: Base RGB color tuple
+        fade: Fade factor (0.0-1.0)
+        explosion_time: Time since explosion
+        special_effect: Type of effect ('none', 'crossette', 'strobe', 'trail')
+        seed: Seed for deterministic randomness
+        particle_id: Index of particle
+        angle: Particle angle
+        speed: Particle speed
+        offset: Animation offset
+        width, height: Frame dimensions
+        burst_type: Type of burst for trail rendering
+    """
+    # Apply fade to color
+    faded_color = [
+        int(base_color[0] * fade),
+        int(base_color[1] * fade),
+        int(base_color[2] * fade)
+    ]
+
+    px_int = int(px)
+    py_int = int(py)
+
+    if special_effect == 'none':
+        # Standard particle rendering
+        if 0 <= px_int < width and 0 <= py_int < height:
+            frame[py_int, px_int] = faded_color
+
+    elif special_effect == 'strobe':
+        # Pulsing particles
+        strobe_intensity = abs(math.sin(offset * 20 + particle_id * 0.5))
+        strobed_color = [
+            int(faded_color[0] * strobe_intensity),
+            int(faded_color[1] * strobe_intensity),
+            int(faded_color[2] * strobe_intensity)
+        ]
+        if 0 <= px_int < width and 0 <= py_int < height:
+            frame[py_int, px_int] = strobed_color
+
+    elif special_effect == 'trail':
+        # Comet trails - draw main particle and fading trail
+        if 0 <= px_int < width and 0 <= py_int < height:
+            frame[py_int, px_int] = faded_color
+
+        # Draw 3-4 trail pixels behind particle
+        trail_length = 3 if burst_type == 'ring' else 4
+        for i in range(1, trail_length + 1):
+            trail_factor = 1.0 - (i / trail_length)
+            trail_px = px - i * math.cos(angle) * 0.5
+            trail_py = py - i * math.sin(angle) * 0.5
+            trail_px_int = int(trail_px)
+            trail_py_int = int(trail_py)
+
+            if 0 <= trail_px_int < width and 0 <= trail_py_int < height:
+                trail_color = [
+                    int(faded_color[0] * trail_factor),
+                    int(faded_color[1] * trail_factor),
+                    int(faded_color[2] * trail_factor)
+                ]
+                # Additive blending for trails
+                current = frame[trail_py_int, trail_px_int]
+                frame[trail_py_int, trail_px_int] = [
+                    min(255, current[0] + trail_color[0]),
+                    min(255, current[1] + trail_color[1]),
+                    min(255, current[2] + trail_color[2])
+                ]
+
+    elif special_effect == 'crossette':
+        # Main particle
+        if 0 <= px_int < width and 0 <= py_int < height:
+            frame[py_int, px_int] = faded_color
+
+        # Secondary bursts at t≈1.5s
+        if 1.4 < explosion_time < 1.8:
+            # Spawn 3-5 secondary particles
+            num_secondary = 3 + ((seed + particle_id) % 3)
+            for sec_id in range(num_secondary):
+                sec_angle = (sec_id / num_secondary) * 2 * math.pi
+                sec_distance = (explosion_time - 1.4) * speed * 1.5
+                sec_px = px + sec_distance * math.cos(sec_angle)
+                sec_py = py + sec_distance * math.sin(sec_angle)
+                sec_px_int = int(sec_px)
+                sec_py_int = int(sec_py)
+
+                if 0 <= sec_px_int < width and 0 <= sec_py_int < height:
+                    # Brighter secondary particles
+                    sec_color = [
+                        min(255, int(faded_color[0] * 1.5)),
+                        min(255, int(faded_color[1] * 1.5)),
+                        min(255, int(faded_color[2] * 1.5))
+                    ]
+                    frame[sec_py_int, sec_px_int] = sec_color
+
+    else:
+        # Default rendering
+        if 0 <= px_int < width and 0 <= py_int < height:
+            frame[py_int, px_int] = faded_color
+
+
 def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
     """
-    Create fireworks particle system
+    Create enhanced fireworks particle system
 
-    Bursts of colored particles exploding and falling
+    Multiple burst types, color effects, and special effects for variety
+
+    Burst Types:
+    - Peony: Classic spherical burst
+    - Willow: Drooping trails
+    - Palm: Thick arcing trails
+    - Ring: Expanding concentric rings
+
+    Color Effects:
+    - Solid: Single color per firework
+    - Multicolor: Rainbow of colors in single burst
+    - Changing: Color shifts over time
+    - Glitter: Random bright sparkles
+
+    Special Effects:
+    - None: Basic particles
+    - Crossette: Secondary mid-air bursts
+    - Strobe: Pulsing particles
+    - Trail: Comet-like trailing effect
 
     Args:
         width: Frame width (32)
@@ -1873,6 +2180,11 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
         # Random explosion height (50% to 75% of height) - consistent per firework
         explosion_height = 0.5 + ((seed * 37) % 25) / 100.0
 
+        # Select effect types for this firework
+        burst_type = _select_burst_type(seed)
+        color_effect = _select_color_effect(seed)
+        special_effect = _select_special_effect(seed)
+
         # Launch phase (0-1 sec)
         if cycle_time < 1.0:
             # Rising rocket (launches from bottom upward)
@@ -1886,47 +2198,78 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
                 if rocket_y - 1 >= 0:
                     frame[rocket_y - 1, rocket_x] = [150, 150, 150]
 
-        # Explosion phase (1-4 sec)
+        # Explosion phase (1-4+ sec)
         elif cycle_time < cycle_duration - 0.5:
             explosion_time = cycle_time - 1.0
-            center_y = int(explosion_height * height)
-            center_x = launch_x
+            center_y = explosion_height * height
+            center_x = float(launch_x)
 
-            # Random color
-            hue = ((seed * 13) % 100) / 100.0
-            r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
-            color = [int(r * 255), int(g * 255), int(b * 255)]
+            # Base hue for this firework
+            base_hue = ((seed * 13) % 100) / 100.0
 
-            # Random particle count (15 to 30)
-            num_particles = 15 + ((seed * 19) % 16)
+            # Particle count varies by burst type
+            if burst_type == 'palm':
+                num_particles = 8 + ((seed * 19) % 5)  # 8-12 particles
+            elif burst_type == 'ring':
+                num_particles = 24  # Multiple of 3 for 3 rings
+            else:
+                num_particles = 15 + ((seed * 19) % 16)  # 15-30 particles
 
-            # Random particle speed (4.0 to 6.5)
+            # Particle speed
             particle_speed = 4.0 + ((seed * 29) % 25) / 10.0
 
             for particle_id in range(num_particles):
                 angle = (particle_id / num_particles) * 2 * math.pi
-                speed = particle_speed
 
-                # Particle position
-                px = center_x + speed * explosion_time * math.cos(angle)
-                py = center_y + speed * explosion_time * math.sin(angle)
+                # Apply burst-specific physics
+                px, py = _apply_burst_physics(
+                    center_x, center_y, angle, particle_speed,
+                    explosion_time, burst_type, particle_id, num_particles
+                )
 
-                # Gravity effect (pulls particles down toward Y=0)
-                py -= explosion_time * explosion_time * 2
+                # Calculate particle color with effects
+                base_color = _get_particle_color(
+                    base_hue, particle_id, num_particles, explosion_time,
+                    color_effect, seed, offset
+                )
 
                 # Fade out over time
                 fade = 1.0 - (explosion_time / 3.0)
                 if fade > 0:
-                    particle_color = [
-                        int(color[0] * fade),
-                        int(color[1] * fade),
-                        int(color[2] * fade)
-                    ]
+                    # Render particle with special effects
+                    _render_particle_with_effects(
+                        frame, px, py, base_color, fade, explosion_time,
+                        special_effect, seed, particle_id, angle,
+                        particle_speed, offset, width, height, burst_type
+                    )
 
-                    px_int = int(px)
-                    py_int = int(py)
-                    if 0 <= px_int < width and 0 <= py_int < height:
-                        frame[py_int, px_int] = particle_color
+                    # Palm burst: render thicker particles (3-5 pixels wide)
+                    if burst_type == 'palm' and fade > 0:
+                        faded_color = [
+                            int(base_color[0] * fade),
+                            int(base_color[1] * fade),
+                            int(base_color[2] * fade)
+                        ]
+                        # Draw thicker particles
+                        for dx in [-1, 0, 1]:
+                            for dy in [-1, 0, 1]:
+                                thick_px = int(px) + dx
+                                thick_py = int(py) + dy
+                                if 0 <= thick_px < width and 0 <= thick_py < height:
+                                    if dx == 0 and dy == 0:
+                                        continue  # Already drawn by main render
+                                    # Dimmer for outer pixels
+                                    dim_color = [
+                                        int(faded_color[0] * 0.6),
+                                        int(faded_color[1] * 0.6),
+                                        int(faded_color[2] * 0.6)
+                                    ]
+                                    current = frame[thick_py, thick_px]
+                                    frame[thick_py, thick_px] = [
+                                        min(255, current[0] + dim_color[0]),
+                                        min(255, current[1] + dim_color[1]),
+                                        min(255, current[2] + dim_color[2])
+                                    ]
 
     return frame
 

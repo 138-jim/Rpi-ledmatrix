@@ -4,35 +4,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Raspberry Pi-based LED matrix control system supporting multiple WS2812B LED panels in configurable layouts. The Raspberry Pi directly controls the LED panels via GPIO pins using the rpi-ws281x library.
+Raspberry Pi-based LED matrix control system for WS2812B LED panels. The system uses direct GPIO control via the rpi-ws281x library - no ESP32 or microcontroller required.
 
-**The complete system is already built** - see the `rpi_driver/` directory. This includes:
-- Multi-threaded display driver with hot-reload config
-- Web-based configuration interface (accessible over LAN)
-- Multi-protocol frame input (HTTP, WebSocket, UDP, named pipe)
-- Built-in test patterns for alignment
-- Systemd service for auto-start on boot
+**The system is fully implemented** in the `rpi_driver/` directory with:
+- Multi-threaded display driver with hot-reload configuration
+- FastAPI web server with REST endpoints and WebSocket support
+- Multi-protocol frame input (HTTP POST, WebSocket, UDP, named pipe)
+- Built-in test patterns and animations
+- Power limiting to prevent PSU overload
+- Sleep scheduler for automatic on/off times
+- System monitoring (temperature, FPS, power draw)
+- Auto-updater for git-based deployment
 
 ## Quick Start
 
-**Run the driver:**
+### Run the driver
+
 ```bash
 # Setup (first time only)
 sudo ./setup_rpi_driver.sh
 
-# Run directly
+# Run directly with hardware
 sudo python3 -m rpi_driver.main --config configs/current.json
 
-# Or install as service
+# Run in mock mode (testing without hardware)
+python3 -m rpi_driver.main --mock --verbose
+
+# Install as systemd service (runs on boot)
 sudo ./install_service.sh
+
+# View service logs
+sudo journalctl -u led-driver.service -f
 ```
 
-**Access the web interface** (available over LAN):
-- From the Pi: `http://localhost:8080`
-- From any device on your LAN: `http://192.168.1.15:8080` (replace with your Pi's IP)
-- Or use hostname: `http://raspberrypi.local:8080`
+### Web interface
 
-**Send frames from external programs:**
+Access from any device on your LAN:
+- `http://localhost:8080` (from the Pi)
+- `http://192.168.1.15:8080` (replace with your Pi's IP)
+- `http://raspberrypi.local:8080` (using hostname)
+
+### Send frames from external programs
+
 ```python
 import numpy as np
 import requests
@@ -41,34 +54,52 @@ import requests
 frame = np.zeros((32, 32, 3), dtype=np.uint8)
 frame[10:20, 10:20] = [255, 0, 0]  # Red square
 
-# Send to display (works from any device on LAN)
-requests.post('http://192.168.1.15:8080/api/frame',
-              data=frame.tobytes())
+# Send to display
+requests.post('http://raspberrypi.local:8080/api/frame',
+              data=frame.tobytes(),
+              headers={'Content-Type': 'application/octet-stream'})
 ```
 
-**Enable auto-updates from GitHub:**
-```bash
-# Install auto-updater service (automatically pulls and restarts on git push)
-sudo ./install_auto_updater.sh
+## System Architecture
 
-# View logs
-sudo journalctl -u auto-updater.service -f
-```
+### Multi-threaded Design
 
-## Architecture
+The system uses several threads that communicate via queues:
 
-### Direct GPIO Control
+1. **Main Thread**: Runs FastAPI web server (uvicorn)
+2. **Display Controller Thread** (`display_controller.py`): Main loop that pulls frames from queue, applies coordinate mapping, power limiting, and updates LEDs at target FPS
+3. **UDP Receiver Thread** (`frame_receiver.py`): Listens for UDP packets containing frame data
+4. **Pipe Receiver Thread** (`frame_receiver.py`): Reads frames from named pipe `/tmp/led_frames.pipe`
+5. **Pattern Generator Thread** (`web_api.py`): Generates test patterns on-demand
+6. **Sleep Scheduler Thread** (`sleep_scheduler.py`): Checks time and applies on/off schedule
+7. **System Monitor Thread** (`system_monitor.py`): Periodically samples CPU temperature and power stats
 
-This system uses **direct GPIO control** from the Raspberry Pi to WS2812B LED panels. No intermediary microcontroller (like ESP32) is used - the Raspberry Pi's PWM hardware directly generates the precise timing signals required by WS2812B LEDs.
+### Key Components
 
-**Key Components:**
-- **rpi-ws281x library**: Low-level C library that uses Raspberry Pi PWM/DMA hardware for precise WS2812B timing
-- **Panel Configuration**: JSON-based configuration defining panel layout, positioning, and rotation
-- **Pattern Generation**: Python code for rendering text, animations, and patterns
+- **`main.py`**: Entry point that initializes and coordinates all components
+- **`led_driver.py`**: Thin wrapper around rpi-ws281x library (or mock for testing)
+- **`coordinate_mapper.py`**: Maps virtual 2D frame coordinates to physical LED indices
+  - Handles panel positions, rotations (0/90/180/270)
+  - Pre-computes lookup tables for fast mapping
+  - Supports serpentine (snake) wiring patterns
+- **`display_controller.py`**: Main display loop
+  - Pulls frames from queue
+  - Applies coordinate mapping
+  - Applies power limiting
+  - Updates LEDs at target FPS
+  - Supports hot-reload of configuration
+- **`frame_receiver.py`**: Multi-protocol frame input (UDP and named pipe)
+- **`web_api.py`**: FastAPI server with REST + WebSocket endpoints
+- **`config_manager.py`**: Loads/saves JSON panel configurations
+- **`test_patterns.py`**: Built-in patterns (corners, grid, rainbow, scrolling text, etc.)
+- **`power_limiter.py`**: Dynamically reduces brightness to stay within current limits
+- **`sleep_scheduler.py`**: Automatic on/off at scheduled times
+- **`system_monitor.py`**: Monitors CPU temperature and calculates power draw estimates
 
-### Panel Configuration Format
+### Panel Configuration
 
-Panel layouts are defined in JSON files (e.g., `panel_config.json`):
+Panels are defined in JSON files like `configs/current.json`:
+
 ```json
 {
   "grid": {
@@ -87,209 +118,267 @@ Panel layouts are defined in JSON files (e.g., `panel_config.json`):
 }
 ```
 
-**Key Concepts:**
+- `id`: Physical panel order (daisy-chain order on GPIO pin)
 - `position`: Logical position in combined display (measured in panels, not pixels)
-- `rotation`: 0, 90, 180, or 270 degrees to account for physical panel orientation
-- `wiring_pattern`: "snake" (zigzag), "sequential" (left-to-right), or "vertical_snake"
-- All panels are daisy-chained on a single GPIO pin with data flowing through panels in order
+- `rotation`: Physical panel rotation (0/90/180/270 degrees)
+- `wiring_pattern`: How pixels are wired within each panel ("snake", "sequential", "vertical_snake")
 
-### Hardware Wiring
+### Coordinate Mapping Flow
 
-WS2812B panels must be connected in a daisy-chain configuration:
-```
-Raspberry Pi GPIO Pin 18 (PWM0) → Panel 0 DIN
-Panel 0 DOUT → Panel 1 DIN
-Panel 1 DOUT → Panel 2 DIN
-...
-```
+1. External program generates frame in **virtual coordinates** (e.g., 32x32 for 2x2 grid of 16x16 panels)
+2. `CoordinateMapper.map_frame()` converts to **physical LED indices** using pre-computed lookup table
+3. Lookup table accounts for:
+   - Panel positions in grid
+   - Panel rotations
+   - Serpentine wiring within panels
+   - Display-level rotation (optional)
 
-**Important GPIO Pins:**
-- **GPIO 18 (Pin 12)**: PWM0 - Most common for LED control (default for rpi-ws281x)
-- **GPIO 13 (Pin 33)**: PWM1 - Alternative PWM pin
-- **GPIO 10 (Pin 19)**: SPI MOSI - Can be used with SPI mode
-- **GPIO 21 (Pin 40)**: PCM - Alternative using PCM hardware
-
-**Power Considerations:**
-- WS2812B LEDs draw significant current (up to 60mA per LED at full white)
-- Use external 5V power supply for LED strips
-- Connect Raspberry Pi ground to LED power supply ground
-- Never power more than a few LEDs directly from Raspberry Pi 5V pins
+This allows panels to be physically mounted in any orientation while software sees a simple 2D canvas.
 
 ## Development Commands
 
-### Environment Setup
+### Testing
 
-**On Raspberry Pi:**
 ```bash
-# Install system dependencies
-sudo apt update
-sudo apt install -y python3 python3-pip python3-dev scons swig
+# Run in mock mode (no hardware required)
+python3 -m rpi_driver.main --mock --verbose
 
-# Install Python dependencies
-pip3 install -r requirements.txt
+# Test specific pattern
+curl -X POST http://localhost:8080/api/test-pattern \
+  -H "Content-Type: application/json" \
+  -d '{"pattern": "corners"}'
 
-# Note: rpi-ws281x requires root access or proper permissions
-# Run with sudo, or set up permissions:
-sudo usermod -a -G gpio $USER
+# Send test frame via UDP
+python3 -c "
+import socket, struct, numpy as np
+frame = np.random.randint(0, 255, (32, 32, 3), dtype=np.uint8)
+header = struct.pack('>4sHH', b'LEDF', 32, 32)
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.sendto(header + frame.tobytes(), ('localhost', 5555))
+"
 ```
 
-**Important**: The rpi-ws281x library requires root access or GPIO permissions. Most LED control scripts will need to be run with `sudo`.
-
-### Configuration Generation
-
-Generate panel configurations for different layouts:
+### Configuration
 
 ```bash
-# Use the configurator interactively
+# Generate new panel configuration
 python3 configurator.py
 
-# Or programmatically in your code:
-from configurator import generate_panel_config
-config = generate_panel_config(
-    grid_width=2,
-    grid_height=2,
-    wiring_pattern="snake"
-)
+# Test configuration without restarting
+curl -X POST http://localhost:8080/api/config/reload
+
+# View current configuration
+curl http://localhost:8080/api/config
 ```
 
-### Auto-Updater (Optional)
-
-The auto-updater monitors the git repository and restarts the controller when changes are detected:
+### Service Management
 
 ```bash
-# Update auto_updater.py to point to your LED controller script
-# Then run manually:
-python3 auto_updater.py
+# Start/stop/restart service
+sudo systemctl start led-driver.service
+sudo systemctl stop led-driver.service
+sudo systemctl restart led-driver.service
+
+# Enable/disable auto-start on boot
+sudo systemctl enable led-driver.service
+sudo systemctl disable led-driver.service
+
+# View logs (follow mode)
+sudo journalctl -u led-driver.service -f
+
+# View recent logs
+sudo journalctl -u led-driver.service -n 100
 ```
 
-## Creating a New LED Controller
+### Auto-Updater
 
-Since all ESP32-specific code has been removed, you'll need to create a new controller that uses rpi-ws281x. Here's the basic structure:
+```bash
+# Install auto-updater service (pulls from git and restarts)
+sudo ./install_auto_updater.sh
 
-```python
-#!/usr/bin/env python3
-import time
-import numpy as np
-from rpi_ws281x import PixelStrip, Color
+# View auto-updater logs
+sudo journalctl -u auto-updater.service -f
 
-# LED strip configuration
-LED_COUNT = 1024      # Total number of LEDs (e.g., 4 panels of 16x16 = 1024)
-LED_PIN = 18          # GPIO pin connected to the pixels (must support PWM)
-LED_FREQ_HZ = 800000  # LED signal frequency in hertz (usually 800khz)
-LED_DMA = 10          # DMA channel to use for generating signal
-LED_BRIGHTNESS = 128  # Set to 0 for darkest and 255 for brightest
-LED_INVERT = False    # True to invert the signal (for NPN transistor level shift)
-LED_CHANNEL = 0       # 0 or 1
-LED_STRIP = ws.WS2811_STRIP_GRB  # Strip type (GRB for most WS2812B)
-
-# Create LED strip object
-strip = PixelStrip(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA,
-                   LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
-
-# Initialize the library (must be called once before other functions)
-strip.begin()
-
-# Set pixel color (index, Color(R, G, B))
-strip.setPixelColor(0, Color(255, 0, 0))  # Red
-strip.show()
+# Manual run (for testing)
+python3 auto_updater.py --repo-path /home/jim/Esp32-matrix --service led-driver.service
 ```
 
-**Key Functions:**
-- `strip.begin()`: Initialize the strip (call once at startup)
-- `strip.setPixelColor(index, Color(r, g, b))`: Set color for LED at index
-- `strip.show()`: Update the physical LEDs with buffered colors
-- `strip.setBrightness(brightness)`: Set global brightness (0-255)
-- `Color(r, g, b)` or `Color(r, g, b, w)`: Create color value
+## API Endpoints
 
-## Panel Mapping
+### REST API
 
-When using multiple panels, you need to map 2D coordinates (x, y) to linear LED indices:
+- `GET /api/config` - Get current panel configuration
+- `POST /api/config` - Update full configuration (triggers reload)
+- `POST /api/config/reload` - Reload config from disk without restart
+- `GET /api/panels` - List all panels
+- `PUT /api/panels/{id}` - Update single panel (position/rotation)
+- `POST /api/frame` - Submit frame (raw RGB bytes: width × height × 3)
+- `POST /api/brightness` - Set brightness (0-255)
+- `POST /api/test-pattern` - Display test pattern (corners, grid, rainbow, etc.)
+- `GET /api/status` - System status (FPS, queue size, brightness, dimensions)
+- `GET /api/patterns` - List available test patterns
+- `POST /api/sleep-schedule` - Configure auto on/off times
+- `GET /api/sleep-schedule` - Get current sleep schedule
+- `POST /api/power-limit` - Configure power limiting
+- `GET /api/power-limit` - Get current power limit settings
+- `GET /api/system-stats` - System monitoring (CPU temp, power draw estimates)
 
-```python
-def xy_to_index(x, y, panel_width=16, panel_height=16, panels_wide=2):
-    """
-    Convert 2D coordinates to LED strip index
-    Assumes panels are in a snake pattern
-    """
-    panel_x = x // panel_width
-    panel_y = y // panel_height
-    pixel_x = x % panel_width
-    pixel_y = y % panel_height
+### WebSocket API
 
-    # Calculate panel index (snake pattern)
-    if panel_y % 2 == 0:
-        panel_index = panel_y * panels_wide + panel_x
-    else:
-        panel_index = panel_y * panels_wide + (panels_wide - 1 - panel_x)
-
-    # Calculate pixel within panel (typically snake pattern within panel too)
-    if pixel_y % 2 == 0:
-        pixel_index = pixel_y * panel_width + pixel_x
-    else:
-        pixel_index = pixel_y * panel_width + (panel_width - 1 - pixel_x)
-
-    return panel_index * (panel_width * panel_height) + pixel_index
-```
+- `WS /ws/frames` - Stream frames (binary RGB data)
+- `WS /ws/preview` - Receive live preview of displayed frames (JPEG encoded)
 
 ## Common Patterns
 
-### Wiring Patterns
+### Adding a new test pattern
 
-- **snake**: Most common for daisy-chained LED strips. Alternating left-to-right and right-to-left rows
-- **sequential**: Always left-to-right (rare, requires longer wiring)
-- **vertical_snake**: Alternating top-to-bottom and bottom-to-top columns
+1. Add pattern function to `test_patterns.py`:
+```python
+def my_pattern(width: int, height: int, frame_number: int) -> np.ndarray:
+    """Generate my custom pattern"""
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+    # ... generate pattern ...
+    return frame
+```
 
-The pattern affects how you map 2D coordinates to LED indices.
+2. Pattern is automatically available via API:
+```bash
+curl -X POST http://localhost:8080/api/test-pattern \
+  -H "Content-Type: application/json" \
+  -d '{"pattern": "my_pattern"}'
+```
 
-### Panel Rotation
+### Sending frames from Python script
 
-Physical panels may be mounted rotated to simplify wiring. Use the `rotation` parameter (0/90/180/270) in panel config. Your controller code should:
-1. Generate content in logical coordinates
-2. Apply rotation transformation
-3. Map to physical LED indices
+```python
+import numpy as np
+import requests
 
-### Performance Tips
+def send_frame(frame: np.ndarray, host='raspberrypi.local', port=8080):
+    """Send frame to LED display"""
+    requests.post(f'http://{host}:{port}/api/frame',
+                  data=frame.tobytes(),
+                  headers={'Content-Type': 'application/octet-stream'})
 
-- **Update Rate**: rpi-ws281x can achieve 30-60 FPS depending on LED count
-- **Minimize strip.show() calls**: Buffer multiple pixel updates, then call show() once
-- **Use numpy**: For bulk pixel operations, numpy arrays are much faster than loops
-- **Consider brightness**: Lower brightness = less power = cooler operation
-- **CPU affinity**: For critical timing, consider dedicating a CPU core
+# Create animation loop
+for i in range(100):
+    frame = np.zeros((32, 32, 3), dtype=np.uint8)
+    # ... generate frame ...
+    send_frame(frame)
+```
 
-## Troubleshooting
+### Sending frames via UDP (faster, no HTTP overhead)
+
+```python
+import socket
+import struct
+import numpy as np
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+def send_frame_udp(frame: np.ndarray, host='raspberrypi.local', port=5555):
+    """Send frame via UDP"""
+    height, width = frame.shape[:2]
+    header = struct.pack('>4sHH', b'LEDF', width, height)
+    packet = header + frame.tobytes()
+    sock.sendto(packet, (host, port))
+```
+
+### Hot-reloading configuration
+
+The display controller automatically reloads configuration when signaled:
+
+```bash
+# Trigger reload via API
+curl -X POST http://localhost:8080/api/config/reload
+
+# Or update and reload in one call
+curl -X POST http://localhost:8080/api/config \
+  -H "Content-Type: application/json" \
+  -d @configs/new_config.json
+```
+
+During reload:
+1. Display is cleared
+2. New configuration is loaded
+3. Coordinate mapper rebuilds lookup tables
+4. Display resumes with new mapping
+
+No need to restart the service.
+
+## Hardware Notes
+
+### GPIO Connection
+
+- **GPIO 18 (Pin 12)**: PWM0 - Default pin for LED data line
+- **GND**: Must be common between Pi and LED power supply
+- **External 5V PSU**: Required for LED power (do NOT power from Pi)
+
+### Power Considerations
+
+- WS2812B LEDs draw up to 60mA per LED at full white
+- 4× 16×16 panels = 1024 LEDs = 61.4A theoretical max
+- Power limiter (enabled by default) reduces brightness to stay within PSU limits
+- Default limit: 8.5A (configurable via API)
+
+### Troubleshooting
 
 **"Failed to create mailbox device" or permission errors:**
-- Run with `sudo python3 your_script.py`
-- Or add user to gpio group and configure udev rules
+```bash
+sudo usermod -a -G gpio $USER
+# Then logout and login
+```
+
+**"Permission denied" even after gpio group:**
+```bash
+# Run with sudo (rpi-ws281x requires root for DMA access)
+sudo python3 -m rpi_driver.main
+```
 
 **LEDs show wrong colors:**
-- Check LED_STRIP type (GRB vs RGB vs other)
-- Verify in code: `LED_STRIP = ws.WS2811_STRIP_GRB` or `ws.WS2811_STRIP_RGB`
-
-**No output on LEDs:**
-1. Verify GPIO pin number (BCM numbering, not physical pin)
-2. Check power supply to LEDs
-3. Verify ground connection between Pi and LED power supply
-4. Check data line connection
-5. Test with simple script setting all LEDs to one color
+- Check LED strip type in `led_driver.py` (GRB vs RGB)
+- Default is GRB (0x00081000) for WS2812B
 
 **Flickering or glitching:**
-- Disable onboard audio: Add `dtparam=audio=off` to `/boot/config.txt`
-- Use PCM instead of PWM: Use GPIO 21 instead of GPIO 18
-- Check power supply stability
+```bash
+# Disable onboard audio (conflicts with PWM)
+echo "dtparam=audio=off" | sudo tee -a /boot/config.txt
+sudo reboot
+```
 
-**Panel orientation wrong:**
-1. Use corner test pattern to identify which corner is LED 0
-2. Adjust rotation parameters in panel config
-3. Verify wiring_pattern matches physical connection order
+**Panels in wrong position:**
+- Use test pattern "corners" to identify panel order
+- Adjust `rotation` in web interface or config file
+- Verify `wiring_pattern` matches physical wiring
 
-## Remaining Files
+## File Structure
 
-After ESP32 code removal, these files remain:
+```
+rpi_driver/              - Main driver package
+├── main.py             - Entry point, orchestrates all components
+├── led_driver.py       - rpi-ws281x wrapper (+ mock for testing)
+├── coordinate_mapper.py - Virtual→physical coordinate mapping
+├── display_controller.py - Main display loop (threaded)
+├── frame_receiver.py   - UDP and named pipe input
+├── web_api.py          - FastAPI REST + WebSocket server
+├── config_manager.py   - JSON config loading/saving
+├── test_patterns.py    - Built-in patterns and animations
+├── power_limiter.py    - Dynamic brightness limiting
+├── sleep_scheduler.py  - Auto on/off scheduling
+├── system_monitor.py   - CPU temp and power monitoring
+├── fluid_simulation.py - Physics-based fluid animation
+└── simple_lava_lamp.py - Lava lamp effect
 
-- **configurator.py**: Generate panel configuration JSON files
-- **auto_updater.py**: Git-based auto-deployment system (needs updating with your controller script name)
-- **panel_config*.json**: Example panel configurations
-- **requirements.txt**: Python dependencies including rpi-ws281x
+configs/                - Panel configurations
+├── current.json        - Active configuration
+└── *.json              - Other saved configs
 
-You will need to create new controller scripts that use rpi-ws281x for actual LED control.
+static/                 - Web UI assets
+├── index.html          - Web interface
+└── app.js              - Web interface logic
+
+*.sh                    - Installation scripts
+configurator.py         - Interactive panel config generator
+auto_updater.py         - Git-based auto-deploy script
+requirements.txt        - Python dependencies
+```
