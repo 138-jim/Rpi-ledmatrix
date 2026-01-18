@@ -62,6 +62,7 @@ class SleepScheduleRequest(BaseModel):
 class PowerLimitRequest(BaseModel):
     max_current_amps: float
     enabled: bool
+    dynamic_mode: bool = False
 
 
 class StatusResponse(BaseModel):
@@ -656,6 +657,7 @@ class WebAPIServer:
 
                 power_limiter.set_max_current(request.max_current_amps)
                 power_limiter.set_enabled(request.enabled)
+                power_limiter.set_dynamic_mode(request.dynamic_mode)
 
                 return {
                     "status": "success",

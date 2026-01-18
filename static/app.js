@@ -141,6 +141,7 @@ async function loadPowerLimit() {
             const limit = await response.json();
             document.getElementById('powerLimitAmps').value = limit.max_current_amps;
             document.getElementById('powerLimitEnabled').checked = limit.enabled;
+            document.getElementById('powerLimitDynamic').checked = limit.dynamic_mode || false;
         }
     } catch (error) {
         console.error('Error loading power limit:', error);
@@ -152,13 +153,15 @@ async function savePowerLimit() {
     try {
         const maxCurrentAmps = parseFloat(document.getElementById('powerLimitAmps').value);
         const enabled = document.getElementById('powerLimitEnabled').checked;
+        const dynamicMode = document.getElementById('powerLimitDynamic').checked;
 
         const response = await fetch(`${API_BASE}/api/power-limit`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 max_current_amps: maxCurrentAmps,
-                enabled: enabled
+                enabled: enabled,
+                dynamic_mode: dynamicMode
             })
         });
 
@@ -167,7 +170,8 @@ async function savePowerLimit() {
             throw new Error(error.detail || `HTTP ${response.status}`);
         }
 
-        showStatus(`Power limit ${enabled ? 'enabled' : 'disabled'} at ${maxCurrentAmps}A`, 'success');
+        const modeText = dynamicMode ? ' (Dynamic mode: ON)' : '';
+        showStatus(`Power limit ${enabled ? 'enabled' : 'disabled'} at ${maxCurrentAmps}A${modeText}`, 'success');
 
     } catch (error) {
         console.error('Error saving power limit:', error);
@@ -189,30 +193,6 @@ window.addEventListener('DOMContentLoaded', () => {
     loadPowerLimit();
     updateClock();
     refreshHardwareStats();
-
-    // Setup brightness slider interaction tracking
-    const brightnessSlider = document.getElementById('brightness');
-    if (brightnessSlider) {
-        // Track mouse/touch interaction
-        brightnessSlider.addEventListener('mousedown', () => {
-            brightnessSliderActive = true;
-            logInfo('Brightness slider interaction started');
-        });
-        brightnessSlider.addEventListener('mouseup', () => {
-            brightnessSliderActive = false;
-            lastBrightnessChangeTime = Date.now();
-            logInfo('Brightness slider interaction ended');
-        });
-        brightnessSlider.addEventListener('touchstart', () => {
-            brightnessSliderActive = true;
-            logInfo('Brightness slider interaction started (touch)');
-        });
-        brightnessSlider.addEventListener('touchend', () => {
-            brightnessSliderActive = false;
-            lastBrightnessChangeTime = Date.now();
-            logInfo('Brightness slider interaction ended (touch)');
-        });
-    }
 
     // Setup auto-refresh intervals
     logInfo('Setting up auto-refresh intervals');
@@ -546,10 +526,6 @@ async function setBrightness() {
         }
 
         showStatus(`Brightness set to ${brightness}`, 'success');
-
-        // Reset the change timer so slider doesn't get auto-updated immediately
-        lastBrightnessChangeTime = 0;
-
         refreshStatus();
 
     } catch (error) {

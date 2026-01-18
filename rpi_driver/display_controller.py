@@ -35,7 +35,8 @@ class DisplayController:
                  config_path: str,
                  target_fps: int = 30,
                  power_limit_amps: float = 8.5,
-                 power_limit_enabled: bool = True):
+                 power_limit_enabled: bool = True,
+                 power_limit_dynamic: bool = False):
         """
         Initialize display controller
 
@@ -46,6 +47,9 @@ class DisplayController:
             config_reload_event: Event signaling configuration reload
             config_path: Path to configuration file
             target_fps: Target frame rate (frames per second)
+            power_limit_amps: Maximum current in Amps
+            power_limit_enabled: Whether power limiting is enabled
+            power_limit_dynamic: Whether to dynamically maximize brightness
         """
         self.led_driver = led_driver
         self.mapper = mapper
@@ -72,7 +76,8 @@ class DisplayController:
         self.power_limiter = PowerLimiter(
             led_count=led_count,
             max_current_amps=power_limit_amps,
-            enabled=power_limit_enabled
+            enabled=power_limit_enabled,
+            dynamic_mode=power_limit_dynamic
         )
 
         logger.info(f"Display controller initialized: target {target_fps} FPS")
