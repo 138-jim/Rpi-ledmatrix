@@ -2118,15 +2118,15 @@ def _render_particle_with_effects(frame: np.ndarray, px: float, py: float,
                 flash_size = 1
                 for fdx in range(-flash_size, flash_size + 1):
                     for fdy in range(-flash_size, flash_size + 1):
-                        flash_x = px_int + fdx
-                        flash_y = py_int + fdy
+                        flash_x = px_int + (fdx * 0.5)
+                        flash_y = py_int + (fdy * 0.5)
                         if 0 <= flash_x < width and 0 <= flash_y < height:
                             flash_color = int(255 * flash_intensity)
                             current = frame[flash_y, flash_x]
                             frame[flash_y, flash_x] = [
-                                min(255, current[0]),
-                                min(255, current[1]),
-                                min(255, current[2])
+                                current[0],
+                                current[1],
+                                current[2]
                             ]
 
             for sec_id in range(num_secondary):
@@ -2313,9 +2313,9 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
                     # Palm burst: render thicker particles (3-5 pixels wide)
                     if burst_type == 'palm' and fade > 0:
                         faded_color = [
-                            int(base_color[0] * fade),
-                            int(base_color[1] * fade),
-                            int(base_color[2] * fade)
+                            int(base_color[0] * fade * 2),
+                            int(base_color[1] * fade * 2),
+                            int(base_color[2] * fade * 2)
                         ]
                         # Draw thicker particles
                         for dx in [-1, 0, 1]:
