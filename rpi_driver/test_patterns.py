@@ -1787,7 +1787,7 @@ def dna_helix(width: int, height: int, offset: float = 0) -> np.ndarray:
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
     # Dark background
-    frame[:, :] = [5, 5, 10]
+    frame[:, :] = [0, 0, 1]
 
     # Draw helix along vertical axis
     cx = width / 2.0
