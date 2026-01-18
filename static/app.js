@@ -190,6 +190,30 @@ window.addEventListener('DOMContentLoaded', () => {
     updateClock();
     refreshHardwareStats();
 
+    // Setup brightness slider interaction tracking
+    const brightnessSlider = document.getElementById('brightness');
+    if (brightnessSlider) {
+        // Track mouse/touch interaction
+        brightnessSlider.addEventListener('mousedown', () => {
+            brightnessSliderActive = true;
+            logInfo('Brightness slider interaction started');
+        });
+        brightnessSlider.addEventListener('mouseup', () => {
+            brightnessSliderActive = false;
+            lastBrightnessChangeTime = Date.now();
+            logInfo('Brightness slider interaction ended');
+        });
+        brightnessSlider.addEventListener('touchstart', () => {
+            brightnessSliderActive = true;
+            logInfo('Brightness slider interaction started (touch)');
+        });
+        brightnessSlider.addEventListener('touchend', () => {
+            brightnessSliderActive = false;
+            lastBrightnessChangeTime = Date.now();
+            logInfo('Brightness slider interaction ended (touch)');
+        });
+    }
+
     // Setup auto-refresh intervals
     logInfo('Setting up auto-refresh intervals');
     setInterval(refreshStatus, 2000);           // Status every 2s
@@ -522,6 +546,10 @@ async function setBrightness() {
         }
 
         showStatus(`Brightness set to ${brightness}`, 'success');
+
+        // Reset the change timer so slider doesn't get auto-updated immediately
+        lastBrightnessChangeTime = 0;
+
         refreshStatus();
 
     } catch (error) {
@@ -533,11 +561,17 @@ async function setBrightness() {
 // Update brightness display value
 function updateBrightnessDisplay(value) {
     document.getElementById('brightnessValue').textContent = value;
+    // Mark that user has changed the slider
+    lastBrightnessChangeTime = Date.now();
 }
 
 // Track FPS history for freeze detection
 let fpsHistory = [];
 let lastFpsWarning = 0;
+
+// Track brightness slider interaction
+let brightnessSliderActive = false;
+let lastBrightnessChangeTime = 0;
 
 // Refresh system status
 async function refreshStatus() {
@@ -588,11 +622,15 @@ async function refreshStatus() {
             });
         }
 
-        // Update brightness slider if significantly different
-        const currentSlider = parseInt(document.getElementById('brightness').value);
-        if (Math.abs(currentSlider - status.brightness) > 5) {
-            document.getElementById('brightness').value = status.brightness;
-            document.getElementById('brightnessValue').textContent = status.brightness;
+        // Update brightness slider only if user isn't interacting with it
+        // Wait 3 seconds after last user change before auto-updating
+        const timeSinceChange = now - lastBrightnessChangeTime;
+        if (!brightnessSliderActive && timeSinceChange > 3000) {
+            const currentSlider = parseInt(document.getElementById('brightness').value);
+            if (Math.abs(currentSlider - status.brightness) > 5) {
+                document.getElementById('brightness').value = status.brightness;
+                document.getElementById('brightnessValue').textContent = status.brightness;
+            }
         }
 
     } catch (error) {
