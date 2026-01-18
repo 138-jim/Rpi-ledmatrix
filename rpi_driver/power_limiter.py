@@ -152,24 +152,49 @@ class PowerLimiter:
         max_safe = self.calculate_max_safe_brightness(frame)
 
         if self.dynamic_mode:
-            # Dynamic mode: maximize brightness within power limits
-            # Gradually adjust target brightness toward maximum safe level
-            if self.target_brightness < max_safe:
-                # Increase brightness gradually
-                self.target_brightness = min(self.target_brightness + self.brightness_step, max_safe)
-                self.optimization_count += 1
-            elif self.target_brightness > max_safe:
-                # Decrease brightness immediately if we exceed safe level
-                self.target_brightness = max_safe
-                self.limit_applied_count += 1
+            # Dynamic mode: maintain target current by adjusting brightness
+            # Calculate current at current target brightness
+            current_at_target = self.calculate_frame_current(frame, self.target_brightness)
 
-            # Apply target brightness (clamped to safe range)
-            output_brightness = min(self.target_brightness, max_safe)
+            # Compare to target current (max_current_amps is the target to maintain)
+            current_error = self.max_current_amps - current_at_target
+
+            # Adjust brightness to try to reach target current
+            if abs(current_error) > 0.1:  # Only adjust if error > 0.1A
+                # Calculate brightness needed for target current
+                if current_at_target > 0:
+                    brightness_adjustment_factor = self.max_current_amps / current_at_target
+                    desired_brightness = int(self.target_brightness * brightness_adjustment_factor)
+                else:
+                    desired_brightness = self.target_brightness
+
+                # Gradually move toward desired brightness (damped for stability)
+                if desired_brightness > self.target_brightness:
+                    # Increase brightness gradually
+                    self.target_brightness = min(
+                        self.target_brightness + self.brightness_step,
+                        desired_brightness,
+                        max_safe  # Never exceed safe limit
+                    )
+                    self.optimization_count += 1
+                elif desired_brightness < self.target_brightness:
+                    # Decrease brightness more quickly to avoid overcurrent
+                    decrease_step = self.brightness_step * 2  # Faster decrease
+                    self.target_brightness = max(
+                        self.target_brightness - decrease_step,
+                        desired_brightness,
+                        1  # At least brightness of 1
+                    )
+                    self.limit_applied_count += 1
+
+            # Clamp to safe range
+            output_brightness = max(1, min(self.target_brightness, max_safe, 255))
             was_modified = (output_brightness != requested_brightness)
 
             if was_modified and self.optimization_count % 100 == 1:
+                actual_current = self.calculate_frame_current(frame, output_brightness)
                 logger.info(f"Dynamic brightness: {requested_brightness} → {output_brightness} "
-                          f"(max safe: {max_safe}, target: {self.target_brightness})")
+                          f"(current: {actual_current:.2f}A, target: {self.max_current_amps}A)")
 
             return output_brightness, was_modified
 
