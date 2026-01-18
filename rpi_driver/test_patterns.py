@@ -1787,7 +1787,7 @@ def dna_helix(width: int, height: int, offset: float = 0) -> np.ndarray:
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
     # Dark background
-    frame[:, :] = [0, 0, 1]
+    frame[:, :] = [2, 2, 5]
 
     # Draw helix along vertical axis
     cx = width / 2.0
@@ -2188,7 +2188,7 @@ def fireworks(width: int, height: int, offset: float = 0) -> np.ndarray:
     frame = np.zeros((height, width, 3), dtype=np.uint8)
 
     # Dark night sky
-    frame[:, :] = [0, 0, 10]
+    frame[:, :] = [0, 0, 1]
 
     # Multiple fireworks with randomized properties
     num_fireworks = 4
