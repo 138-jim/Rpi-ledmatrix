@@ -635,3 +635,163 @@ function showStatus(message, type = 'info') {
         }
     }, 5000);
 }
+
+// ============================================================
+// GAME CONTROL FUNCTIONS
+// ============================================================
+
+// Game state update interval
+let gameStateInterval = null;
+
+// Start a game
+async function startGame(gameName) {
+    try {
+        logInfo(`Starting game: ${gameName}`);
+
+        const response = await fetch(`${API_BASE}/api/game/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ game_name: gameName })
+        });
+
+        if (!response.ok) {
+            const errorDetails = await getErrorDetails(response);
+            logError(`Game start failed (${errorDetails.status} ${errorDetails.statusText})`, errorDetails);
+            throw new Error(errorDetails.detail || `HTTP ${errorDetails.status}`);
+        }
+
+        const result = await response.json();
+        logInfo(`Game started successfully: ${gameName}`, result);
+        showStatus(`Game started: ${gameName}`, 'success');
+
+        // Start polling game state
+        startGameStatePolling();
+
+    } catch (error) {
+        logError(`Error starting game: ${gameName}`, error);
+        showStatus(`Error starting game: ${error.message}`, 'error');
+    }
+}
+
+// Send input to current game
+async function sendGameInput(action) {
+    try {
+        const response = await fetch(`${API_BASE}/api/game/input`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: action })
+        });
+
+        if (!response.ok) {
+            const errorDetails = await getErrorDetails(response);
+            logError(`Game input failed (${errorDetails.status} ${errorDetails.statusText})`, errorDetails);
+            throw new Error(errorDetails.detail || `HTTP ${errorDetails.status}`);
+        }
+
+        const result = await response.json();
+        logInfo(`Game input sent: ${action}`, result);
+
+        // Immediately update game state after input
+        updateGameState();
+
+    } catch (error) {
+        logError(`Error sending game input: ${action}`, error);
+        showStatus(`Error: ${error.message}`, 'error');
+    }
+}
+
+// Update game state display
+async function updateGameState() {
+    try {
+        const response = await fetch(`${API_BASE}/api/game/state`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const state = await response.json();
+        const gameStateDiv = document.getElementById('gameState');
+
+        if (!state.running || !state.game_name) {
+            gameStateDiv.textContent = 'No game running';
+            gameStateDiv.style.color = '#94a3b8';
+            stopGameStatePolling();
+            return;
+        }
+
+        // Build state display
+        let stateText = `🎮 ${state.game_name.toUpperCase()}\n`;
+
+        if (state.game_over) {
+            stateText += '❌ GAME OVER\n';
+        } else if (state.paused) {
+            stateText += '⏸ PAUSED\n';
+        }
+
+        if (state.score !== undefined) {
+            stateText += `Score: ${state.score}\n`;
+        }
+        if (state.lives !== undefined) {
+            stateText += `Lives: ${state.lives}\n`;
+        }
+        if (state.level !== undefined) {
+            stateText += `Level: ${state.level}\n`;
+        }
+        if (state.length !== undefined) {
+            stateText += `Length: ${state.length}\n`;
+        }
+        if (state.fps !== undefined) {
+            stateText += `FPS: ${state.fps.toFixed(1)}`;
+        }
+
+        gameStateDiv.textContent = stateText.trim();
+        gameStateDiv.style.color = state.game_over ? '#ff8888' : '#16dbc8';
+
+    } catch (error) {
+        // Silently fail to avoid spam
+        logWarning('Failed to update game state', error);
+    }
+}
+
+// Start polling game state
+function startGameStatePolling() {
+    stopGameStatePolling();
+    updateGameState();  // Immediate update
+    gameStateInterval = setInterval(updateGameState, 250);  // Update every 250ms
+}
+
+// Stop polling game state
+function stopGameStatePolling() {
+    if (gameStateInterval) {
+        clearInterval(gameStateInterval);
+        gameStateInterval = null;
+    }
+}
+
+// Setup keyboard controls
+document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('keydown', (event) => {
+        // Only handle arrow keys and space if not in an input field
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        const keyMap = {
+            'ArrowUp': 'up',
+            'ArrowDown': 'down',
+            'ArrowLeft': 'left',
+            'ArrowRight': 'right',
+            ' ': 'action',
+            'p': 'pause',
+            'r': 'reset'
+        };
+
+        if (keyMap[event.key]) {
+            event.preventDefault();
+            sendGameInput(keyMap[event.key]);
+        }
+    });
+});

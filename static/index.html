@@ -257,6 +257,39 @@
                     </div>
                 </div>
 
+                <!-- Games -->
+                <div class="panel" style="margin-top: 20px;">
+                    <h2>🎮 Games</h2>
+                    <div class="button-group">
+                        <button onclick="startGame('snake')">🐍 Snake</button>
+                        <button onclick="startGame('pong')">🏓 Pong</button>
+                        <button onclick="startGame('tictactoe')">⭕ Tic-Tac-Toe</button>
+                        <button onclick="startGame('breakout')">🧱 Breakout</button>
+                        <button onclick="startGame('tetris')">🟦 Tetris</button>
+                    </div>
+                    <div style="margin-top: 15px; padding: 15px; background: #0f3460; border-radius: 4px;">
+                        <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #16dbc8;">🕹️ Game Controls</h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; max-width: 200px; margin: 0 auto;">
+                            <div></div>
+                            <button onclick="sendGameInput('up')" style="padding: 15px; font-size: 20px;">▲</button>
+                            <div></div>
+                            <button onclick="sendGameInput('left')" style="padding: 15px; font-size: 20px;">◄</button>
+                            <button onclick="sendGameInput('action')" style="padding: 15px; font-size: 12px; background: #e74c3c;">ACTION</button>
+                            <button onclick="sendGameInput('right')" style="padding: 15px; font-size: 20px;">►</button>
+                            <div></div>
+                            <button onclick="sendGameInput('down')" style="padding: 15px; font-size: 20px;">▼</button>
+                            <div></div>
+                        </div>
+                        <div style="margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                            <button onclick="sendGameInput('pause')" style="padding: 8px; font-size: 12px;">⏸ Pause</button>
+                            <button onclick="sendGameInput('reset')" style="padding: 8px; font-size: 12px;">🔄 Reset</button>
+                        </div>
+                        <div id="gameState" style="margin-top: 10px; padding: 10px; background: #1a1a2e; border-radius: 4px; font-size: 12px; text-align: center; color: #94a3b8;">
+                            No game running
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Elapsed Time Color Control -->
                 <div class="panel">
                     <h2>Elapsed Time Color</h2>
@@ -326,7 +359,7 @@
                         </div>
                         <div class="control-group" style="margin-bottom: 10px;">
                             <label>
-                                <input type="checkbox" id="powerLimitDynamic"> 🔆 Dynamic Mode (Maintain target current)
+                                <input type="checkbox" id="powerLimitDynamic"> 🔆 Dynamic Mode (Auto-maximize brightness)
                             </label>
                         </div>
                         <button onclick="savePowerLimit()" style="width: 100%;">💾 Save Power Limit</button>

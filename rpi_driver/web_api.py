@@ -26,6 +26,8 @@ from .led_driver import LEDDriver
 from .coordinate_mapper import CoordinateMapper
 from .display_controller import DisplayController
 from . import test_patterns
+from .game_controller import GameController, GAMES
+from .games import SnakeGame, PongGame, TicTacToeGame, BreakoutGame, TetrisGame
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,14 @@ class PowerLimitRequest(BaseModel):
     max_current_amps: float
     enabled: bool
     dynamic_mode: bool = False
+
+
+class GameStartRequest(BaseModel):
+    game_name: str
+
+
+class GameInputRequest(BaseModel):
+    action: str  # up, down, left, right, action
 
 
 class StatusResponse(BaseModel):
@@ -286,10 +296,18 @@ class WebAPIServer:
 
         self.config_manager = ConfigManager()
 
-        # Initialize pattern generator and simulation generator
+        # Initialize pattern generator, simulation generator, and game controller
         width, height = self.mapper.get_dimensions()
         self.pattern_generator = PatternGenerator(frame_queue, width, height)
         self.simulation_generator = SimulationGenerator(frame_queue, width, height)
+        self.game_controller = GameController(frame_queue, width, height)
+
+        # Register available games
+        GAMES['snake'] = SnakeGame
+        GAMES['pong'] = PongGame
+        GAMES['tictactoe'] = TicTacToeGame
+        GAMES['breakout'] = BreakoutGame
+        GAMES['tetris'] = TetrisGame
 
         # Create FastAPI app
         self.app = FastAPI(title="LED Display Driver API", version="1.0.0")
@@ -505,11 +523,103 @@ class WebAPIServer:
             try:
                 self.pattern_generator.stop()
                 self.simulation_generator.stop()
+                self.game_controller.stop()
                 return {"status": "success", "message": "Pattern stopped"}
 
             except Exception as e:
                 logger.error(f"Error stopping pattern: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
+
+        # Game endpoints
+        @self.app.post("/api/game/start")
+        async def start_game(request: GameStartRequest):
+            """Start a game"""
+            try:
+                game_name = request.game_name
+
+                # Validate game exists
+                if game_name not in GAMES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Unknown game: {game_name}. Available games: {', '.join(GAMES.keys())}"
+                    )
+
+                # Stop any running patterns/games
+                self.pattern_generator.stop()
+                self.simulation_generator.stop()
+
+                # Start the game
+                success = self.game_controller.start_game(game_name, GAMES[game_name])
+
+                if not success:
+                    raise HTTPException(status_code=500, detail=f"Failed to start game: {game_name}")
+
+                return {
+                    "status": "success",
+                    "game": game_name,
+                    "message": f"Game {game_name} started"
+                }
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error starting game: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/api/game/input")
+        async def game_input(request: GameInputRequest):
+            """Send input to current game"""
+            try:
+                action = request.action.lower()
+
+                # Validate action
+                valid_actions = ['up', 'down', 'left', 'right', 'action', 'reset', 'pause', 'resume']
+                if action not in valid_actions:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid action: {action}. Valid actions: {', '.join(valid_actions)}"
+                    )
+
+                # Handle special actions
+                if action == 'reset':
+                    self.game_controller.reset()
+                    return {"status": "success", "message": "Game reset"}
+                elif action == 'pause':
+                    self.game_controller.pause()
+                    return {"status": "success", "message": "Game paused"}
+                elif action == 'resume':
+                    self.game_controller.resume()
+                    return {"status": "success", "message": "Game resumed"}
+
+                # Send input to game
+                handled = self.game_controller.send_input(action)
+
+                if not handled:
+                    raise HTTPException(status_code=400, detail="No game is currently running")
+
+                return {"status": "success", "action": action}
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error sending game input: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/game/state")
+        async def game_state():
+            """Get current game state"""
+            try:
+                state = self.game_controller.get_state()
+                return state
+
+            except Exception as e:
+                logger.error(f"Error getting game state: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/api/games")
+        async def get_games():
+            """Get list of available games"""
+            return {"games": list(GAMES.keys())}
 
         # Elapsed time color endpoint
         @self.app.post("/api/elapsed-time-color")
@@ -748,3 +858,4 @@ class WebAPIServer:
         logger.info("Shutting down web API server")
         self.pattern_generator.stop()
         self.simulation_generator.stop()
+        self.game_controller.stop()
