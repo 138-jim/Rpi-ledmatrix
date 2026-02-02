@@ -144,7 +144,7 @@ class LEDMatrixBLEServer:
         # Add LED Matrix service
         self.peripheral.add_service(
             srv_id=self.srv_id,
-            uuid=protocol.SERVICE_UUID.replace('-', ''),
+            uuid=protocol.SERVICE_UUID,
             primary=True
         )
 
@@ -154,7 +154,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_BRIGHTNESS_UUID.replace('-', ''),
+            uuid=protocol.CHAR_BRIGHTNESS_UUID,
             value=[],
             notifying=False,
             flags=['write', 'write-without-response'],
@@ -166,7 +166,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_PATTERN_UUID.replace('-', ''),
+            uuid=protocol.CHAR_PATTERN_UUID,
             value=[],
             notifying=False,
             flags=['write', 'write-without-response'],
@@ -178,7 +178,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_GAME_CONTROL_UUID.replace('-', ''),
+            uuid=protocol.CHAR_GAME_CONTROL_UUID,
             value=[],
             notifying=False,
             flags=['write', 'write-without-response'],
@@ -190,7 +190,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_STATUS_UUID.replace('-', ''),
+            uuid=protocol.CHAR_STATUS_UUID,
             value=[],
             notifying=False,
             flags=['read', 'notify'],
@@ -202,7 +202,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_CONFIG_UUID.replace('-', ''),
+            uuid=protocol.CHAR_CONFIG_UUID,
             value=[],
             notifying=False,
             flags=['read'],
@@ -214,7 +214,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_POWER_LIMIT_UUID.replace('-', ''),
+            uuid=protocol.CHAR_POWER_LIMIT_UUID,
             value=[],
             notifying=False,
             flags=['write', 'write-without-response'],
@@ -226,7 +226,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_SLEEP_SCHEDULE_UUID.replace('-', ''),
+            uuid=protocol.CHAR_SLEEP_SCHEDULE_UUID,
             value=[],
             notifying=False,
             flags=['write', 'write-without-response'],
@@ -238,7 +238,7 @@ class LEDMatrixBLEServer:
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
-            uuid=protocol.CHAR_FRAME_STREAM_UUID.replace('-', ''),
+            uuid=protocol.CHAR_FRAME_STREAM_UUID,
             value=[],
             notifying=False,
             flags=['write', 'write-without-response'],
