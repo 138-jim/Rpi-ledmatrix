@@ -47,7 +47,9 @@ echo ""
 
 # Install Python dependencies
 echo "[2/5] Installing Python dependencies..."
-pip3 install -r "$SCRIPT_DIR/requirements.txt"
+# Use --break-system-packages for modern Raspberry Pi OS (Bookworm+)
+# This is safe for system services with minimal dependencies
+pip3 install --break-system-packages -r "$SCRIPT_DIR/requirements.txt"
 
 echo ""
 
