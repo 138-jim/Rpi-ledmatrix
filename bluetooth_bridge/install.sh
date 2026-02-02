@@ -61,6 +61,12 @@ systemctl start bluetooth
 # Make BLE server executable
 chmod +x "$SCRIPT_DIR/ble_server.py"
 
+# Configure D-Bus permissions for bluezero
+echo "[3.5/5] Configuring D-Bus permissions..."
+cp "$SCRIPT_DIR/bluezero.conf" /etc/dbus-1/system.d/bluezero.conf
+systemctl reload dbus
+echo "D-Bus configured for bluezero"
+
 echo ""
 
 # Create systemd service

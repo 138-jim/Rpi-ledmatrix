@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
 """
-BLE Server for LED Matrix Controller using bluezero
+BLE Server for LED Matrix Controller
 
-This module implements a Bluetooth Low Energy peripheral using the bluezero
-library, which provides a clean API for BlueZ on Linux/Raspberry Pi.
+This module implements a Bluetooth Low Energy peripheral that exposes
+characteristics for controlling the LED matrix display. It translates
+BLE commands to HTTP API calls to the existing LED driver web server.
 """
 
+import asyncio
 import json
 import logging
 import struct
 import time
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import requests
-from bluezero import peripheral
-from bluezero import adapter
+from bleak import BleakGATTCharacteristic, BleakGATTServiceCollection
+from bleak.backends.characteristic import GattCharacteristicsFlags
+
+try:
+    from bless import (
+        BlessServer,
+        BlessGATTCharacteristic,
+        GATTCharacteristicProperties,
+        GATTAttributePermissions
+    )
+except ImportError:
+    print("Error: 'bless' library not found.")
+    print("Please install with: pip3 install bless")
+    exit(1)
 
 import protocol
 
@@ -26,7 +40,6 @@ logger = logging.getLogger(__name__)
 
 # LED Driver API endpoint
 API_BASE_URL = "http://localhost:8080/api"
-
 
 class FrameAssembler:
     """Handles reassembly of chunked frame data"""
@@ -111,145 +124,16 @@ class FrameAssembler:
 
 
 class LEDMatrixBLEServer:
-    """BLE Server for LED Matrix control using bluezero"""
+    """BLE Server for LED Matrix control"""
 
     def __init__(self, api_url: str = API_BASE_URL):
         self.api_url = api_url
+        self.server: Optional[BlessServer] = None
         self.frame_assembler = FrameAssembler()
+        self.status_update_task: Optional[asyncio.Task] = None
+        self.last_status: Dict = {}
 
-        # Get adapter
-        adapters = list(adapter.Adapter.available())
-        if not adapters:
-            raise RuntimeError("No Bluetooth adapters found")
-
-        self.adapter_addr = adapters[0].address
-        logger.info(f"Using Bluetooth adapter: {self.adapter_addr}")
-
-        # Create peripheral
-        self.peripheral = peripheral.Peripheral(
-            self.adapter_addr,
-            local_name='LED Matrix',
-            appearance=0x0000  # Generic device
-        )
-
-        # Service ID counter
-        self.srv_id = 1
-
-        # Setup GATT services and characteristics
-        self._setup_gatt()
-
-    def _setup_gatt(self):
-        """Setup GATT services and characteristics"""
-
-        # Add LED Matrix service
-        self.peripheral.add_service(
-            srv_id=self.srv_id,
-            uuid=protocol.SERVICE_UUID.replace('-', ''),
-            primary=True
-        )
-
-        char_id = 1
-
-        # Brightness characteristic (write)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_BRIGHTNESS_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['write', 'write-without-response'],
-            write_callback=self.on_brightness_write
-        )
-        char_id += 1
-
-        # Pattern characteristic (write)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_PATTERN_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['write', 'write-without-response'],
-            write_callback=self.on_pattern_write
-        )
-        char_id += 1
-
-        # Game Control characteristic (write)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_GAME_CONTROL_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['write', 'write-without-response'],
-            write_callback=self.on_game_control_write
-        )
-        char_id += 1
-
-        # Status characteristic (read, notify)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_STATUS_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['read', 'notify'],
-            read_callback=self.on_status_read
-        )
-        char_id += 1
-
-        # Config characteristic (read)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_CONFIG_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['read'],
-            read_callback=self.on_config_read
-        )
-        char_id += 1
-
-        # Power Limit characteristic (write)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_POWER_LIMIT_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['write', 'write-without-response'],
-            write_callback=self.on_power_limit_write
-        )
-        char_id += 1
-
-        # Sleep Schedule characteristic (write)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_SLEEP_SCHEDULE_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['write', 'write-without-response'],
-            write_callback=self.on_sleep_schedule_write
-        )
-        char_id += 1
-
-        # Frame Stream characteristic (write)
-        self.peripheral.add_characteristic(
-            srv_id=self.srv_id,
-            chr_id=char_id,
-            uuid=protocol.CHAR_FRAME_STREAM_UUID.replace('-', ''),
-            value=[],
-            notifying=False,
-            flags=['write', 'write-without-response'],
-            write_callback=self.on_frame_stream_write
-        )
-
-        logger.info("GATT services and characteristics configured")
-
-    # Characteristic callbacks
-
-    def on_brightness_write(self, value, options):
+    async def write_brightness(self, characteristic: BlessGATTCharacteristic, value: bytes):
         """Handle brightness control write"""
         if len(value) != 1:
             logger.warning("Invalid brightness value length")
@@ -265,13 +149,13 @@ class LEDMatrixBLEServer:
                 timeout=2
             )
             if response.status_code == 200:
-                logger.info("Brightness set successfully")
+                logger.info(f"Brightness set successfully")
             else:
                 logger.error(f"Failed to set brightness: {response.status_code}")
         except Exception as e:
             logger.error(f"Error setting brightness: {e}")
 
-    def on_pattern_write(self, value, options):
+    async def write_pattern(self, characteristic: BlessGATTCharacteristic, value: bytes):
         """Handle pattern selection write"""
         if len(value) != 1:
             logger.warning("Invalid pattern value length")
@@ -293,13 +177,13 @@ class LEDMatrixBLEServer:
                 timeout=2
             )
             if response.status_code == 200:
-                logger.info("Pattern set successfully")
+                logger.info(f"Pattern set successfully")
             else:
                 logger.error(f"Failed to set pattern: {response.status_code}")
         except Exception as e:
             logger.error(f"Error setting pattern: {e}")
 
-    def on_game_control_write(self, value, options):
+    async def write_game_control(self, characteristic: BlessGATTCharacteristic, value: bytes):
         """Handle game control write"""
         if len(value) != 2:
             logger.warning("Invalid game control value length")
@@ -324,11 +208,12 @@ class LEDMatrixBLEServer:
                     timeout=2
                 )
                 if response.status_code == 200:
-                    logger.info("Game started successfully")
+                    logger.info(f"Game started successfully")
                 else:
                     logger.error(f"Failed to start game: {response.status_code}")
             except Exception as e:
                 logger.error(f"Error starting game: {e}")
+
         else:
             # It's a game input command
             action_name = protocol.get_action_name(action_index)
@@ -345,20 +230,20 @@ class LEDMatrixBLEServer:
                     timeout=2
                 )
                 if response.status_code == 200:
-                    logger.info("Game input sent successfully")
+                    logger.info(f"Game input sent successfully")
                 else:
                     logger.error(f"Failed to send game input: {response.status_code}")
             except Exception as e:
                 logger.error(f"Error sending game input: {e}")
 
-    def on_power_limit_write(self, value, options):
+    async def write_power_limit(self, characteristic: BlessGATTCharacteristic, value: bytes):
         """Handle power limit write"""
         if len(value) != 2:
             logger.warning("Invalid power limit value length")
             return
 
-        # Power limit in 0.1A units
-        power_units = struct.unpack('>H', bytes(value))[0]
+        # Power limit in 0.1A units (e.g., 85 = 8.5A)
+        power_units = struct.unpack('>H', value)[0]
         power_amps = power_units / 10.0
 
         logger.info(f"Setting power limit to {power_amps}A")
@@ -373,19 +258,19 @@ class LEDMatrixBLEServer:
                 timeout=2
             )
             if response.status_code == 200:
-                logger.info("Power limit set successfully")
+                logger.info(f"Power limit set successfully")
             else:
                 logger.error(f"Failed to set power limit: {response.status_code}")
         except Exception as e:
             logger.error(f"Error setting power limit: {e}")
 
-    def on_sleep_schedule_write(self, value, options):
+    async def write_sleep_schedule(self, characteristic: BlessGATTCharacteristic, value: bytes):
         """Handle sleep schedule write"""
         if len(value) != 4:
             logger.warning("Invalid sleep schedule value length")
             return
 
-        off_hour, off_min, on_hour, on_min = value[0], value[1], value[2], value[3]
+        off_hour, off_min, on_hour, on_min = struct.unpack('BBBB', value)
 
         logger.info(f"Setting sleep schedule: off {off_hour:02d}:{off_min:02d}, on {on_hour:02d}:{on_min:02d}")
 
@@ -400,23 +285,23 @@ class LEDMatrixBLEServer:
                 timeout=2
             )
             if response.status_code == 200:
-                logger.info("Sleep schedule set successfully")
+                logger.info(f"Sleep schedule set successfully")
             else:
                 logger.error(f"Failed to set sleep schedule: {response.status_code}")
         except Exception as e:
             logger.error(f"Error setting sleep schedule: {e}")
 
-    def on_frame_stream_write(self, value, options):
+    async def write_frame_stream(self, characteristic: BlessGATTCharacteristic, value: bytes):
         """Handle frame stream write (chunked)"""
         # Check for timeout and reset if needed
         self.frame_assembler.check_timeout()
 
         # Add chunk
-        frame_data = self.frame_assembler.add_chunk(bytes(value))
+        frame_data = self.frame_assembler.add_chunk(value)
 
         if frame_data:
             # Complete frame received, send to display
-            logger.info("Sending complete frame to display")
+            logger.info(f"Sending complete frame to display")
 
             try:
                 response = requests.post(
@@ -426,67 +311,174 @@ class LEDMatrixBLEServer:
                     timeout=2
                 )
                 if response.status_code == 200:
-                    logger.info("Frame sent successfully")
+                    logger.info(f"Frame sent successfully")
                 else:
                     logger.error(f"Failed to send frame: {response.status_code}")
             except Exception as e:
                 logger.error(f"Error sending frame: {e}")
 
-    def on_status_read(self):
+    async def read_status(self, characteristic: BlessGATTCharacteristic) -> bytes:
         """Handle status read request"""
         try:
             response = requests.get(f"{self.api_url}/status", timeout=2)
             if response.status_code == 200:
                 status_json = json.dumps(response.json())
-                return list(status_json.encode('utf-8'))
+                return status_json.encode('utf-8')
             else:
                 logger.error(f"Failed to get status: {response.status_code}")
-                return []
+                return b'{}'
         except Exception as e:
             logger.error(f"Error getting status: {e}")
-            return []
+            return b'{}'
 
-    def on_config_read(self):
+    async def read_config(self, characteristic: BlessGATTCharacteristic) -> bytes:
         """Handle config read request"""
         try:
             response = requests.get(f"{self.api_url}/config", timeout=2)
             if response.status_code == 200:
                 config_json = json.dumps(response.json())
-                return list(config_json.encode('utf-8'))
+                return config_json.encode('utf-8')
             else:
                 logger.error(f"Failed to get config: {response.status_code}")
-                return []
+                return b'{}'
         except Exception as e:
             logger.error(f"Error getting config: {e}")
-            return []
+            return b'{}'
 
-    def start(self):
+    async def status_update_loop(self):
+        """Background task to poll status and notify clients"""
+        while True:
+            try:
+                await asyncio.sleep(2)  # Poll every 2 seconds
+
+                response = requests.get(f"{self.api_url}/status", timeout=2)
+                if response.status_code == 200:
+                    status = response.json()
+
+                    # Only notify if status changed
+                    if status != self.last_status:
+                        self.last_status = status
+                        # Note: Notifications would be sent here when clients subscribe
+                        logger.debug(f"Status updated: {status}")
+
+            except Exception as e:
+                logger.error(f"Error in status update loop: {e}")
+
+    async def run(self):
         """Start the BLE server"""
         logger.info("Starting LED Matrix BLE Server")
-        logger.info("Advertising as 'LED Matrix'")
 
-        # Publish (start advertising)
-        self.peripheral.publish()
+        # Create BLE server
+        self.server = BlessServer(name="LED Matrix")
 
-        logger.info("✅ BLE Server started successfully")
-        logger.info("Waiting for connections...")
+        # Add service
+        await self.server.add_gatt_service(protocol.SERVICE_UUID)
 
+        # Add characteristics
+        # Brightness (write)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_BRIGHTNESS_UUID,
+            GATTCharacteristicProperties.write,
+            None,
+            GATTAttributePermissions.writeable,
+            self.write_brightness
+        )
 
-def main():
-    """Main entry point"""
-    try:
-        server = LEDMatrixBLEServer()
-        server.start()
+        # Pattern (write)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_PATTERN_UUID,
+            GATTCharacteristicProperties.write,
+            None,
+            GATTAttributePermissions.writeable,
+            self.write_pattern
+        )
+
+        # Game Control (write)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_GAME_CONTROL_UUID,
+            GATTCharacteristicProperties.write,
+            None,
+            GATTAttributePermissions.writeable,
+            self.write_game_control
+        )
+
+        # Status (read, notify)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_STATUS_UUID,
+            GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify,
+            None,
+            GATTAttributePermissions.readable,
+            self.read_status
+        )
+
+        # Config (read)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_CONFIG_UUID,
+            GATTCharacteristicProperties.read,
+            None,
+            GATTAttributePermissions.readable,
+            self.read_config
+        )
+
+        # Power Limit (write)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_POWER_LIMIT_UUID,
+            GATTCharacteristicProperties.write,
+            None,
+            GATTAttributePermissions.writeable,
+            self.write_power_limit
+        )
+
+        # Sleep Schedule (write)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_SLEEP_SCHEDULE_UUID,
+            GATTCharacteristicProperties.write,
+            None,
+            GATTAttributePermissions.writeable,
+            self.write_sleep_schedule
+        )
+
+        # Frame Stream (write)
+        await self.server.add_gatt_characteristic(
+            protocol.SERVICE_UUID,
+            protocol.CHAR_FRAME_STREAM_UUID,
+            GATTCharacteristicProperties.write,
+            None,
+            GATTAttributePermissions.writeable,
+            self.write_frame_stream
+        )
+
+        # Start server
+        await self.server.start()
+        logger.info("BLE Server started, advertising as 'LED Matrix'")
+
+        # Start status update loop
+        self.status_update_task = asyncio.create_task(self.status_update_loop())
 
         # Keep running
-        while True:
-            time.sleep(1)
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Shutting down...")
+        finally:
+            if self.status_update_task:
+                self.status_update_task.cancel()
+            await self.server.stop()
 
-    except KeyboardInterrupt:
-        logger.info("Shutting down...")
-    except Exception as e:
-        logger.error(f"Fatal error: {e}", exc_info=True)
+
+async def main():
+    """Main entry point"""
+    server = LEDMatrixBLEServer()
+    await server.run()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
