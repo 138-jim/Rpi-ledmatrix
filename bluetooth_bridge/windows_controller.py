@@ -24,20 +24,53 @@ class LEDMatrixController:
         self.device_address: Optional[str] = None
 
     async def scan_for_device(self, timeout: float = 10.0) -> bool:
-        """Scan for LED Matrix device"""
-        logger.info("Scanning for 'LED Matrix' device...")
+        """Scan for BLE devices and let user choose"""
+        logger.info("Scanning for Bluetooth devices...")
+        print("\nScanning for Bluetooth devices (this may take a few seconds)...\n")
 
         devices = await BleakScanner.discover(timeout=timeout)
 
-        for device in devices:
-            logger.info(f"Found device: {device.name} ({device.address})")
-            if device.name == "LED Matrix":
-                self.device_address = device.address
-                logger.info(f"✅ Found LED Matrix at {device.address}")
-                return True
+        if not devices:
+            logger.error("No Bluetooth devices found")
+            return False
 
-        logger.error("LED Matrix device not found")
-        return False
+        # Filter out devices without names and create a list
+        named_devices = [(i, dev) for i, dev in enumerate(devices) if dev.name]
+
+        if not named_devices:
+            logger.error("No named Bluetooth devices found")
+            return False
+
+        # Display devices
+        print("="*60)
+        print("Available Bluetooth Devices:")
+        print("="*60)
+        for idx, device in named_devices:
+            print(f"{idx + 1}. {device.name} ({device.address})")
+        print("="*60)
+
+        # Let user choose
+        while True:
+            try:
+                choice = input(f"\nSelect device (1-{len(named_devices)}) or 0 to cancel: ").strip()
+                choice_num = int(choice)
+
+                if choice_num == 0:
+                    logger.info("Scan cancelled by user")
+                    return False
+
+                if 1 <= choice_num <= len(named_devices):
+                    idx, selected_device = named_devices[choice_num - 1]
+                    self.device_address = selected_device.address
+                    logger.info(f"✅ Selected: {selected_device.name} at {selected_device.address}")
+                    return True
+                else:
+                    print(f"Please enter a number between 1 and {len(named_devices)}")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+            except KeyboardInterrupt:
+                print("\nCancelled by user")
+                return False
 
     async def connect(self) -> bool:
         """Connect to the LED Matrix device"""
