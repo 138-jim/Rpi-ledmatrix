@@ -24,6 +24,7 @@ class BluetoothManager: NSObject, ObservableObject {
     @Published var availableGames: [String] = []
     @Published var deviceCapabilities: DeviceCapabilities?
     @Published var powerLimitAmps: Float = 80.0
+    @Published var sleepSchedule: SleepSchedule = .defaultSchedule
 
     // MARK: - Private Properties
 
@@ -159,12 +160,27 @@ class BluetoothManager: NSObject, ObservableObject {
     }
 
     /// Set sleep schedule
-    func setSleepSchedule(offHour: UInt8, offMin: UInt8, onHour: UInt8, onMin: UInt8) {
+    func setSleepSchedule(offHour: UInt8, offMin: UInt8, onHour: UInt8, onMin: UInt8, enabled: Bool = true) {
         guard let characteristic = sleepScheduleCharacteristic else { return }
 
         let data = Data([offHour, offMin, onHour, onMin])
         writeValue(data, to: characteristic)
-        print("🌙 Setting sleep schedule: off \(offHour):\(offMin), on \(onHour):\(onMin)")
+
+        // Update local state
+        let calendar = Calendar.current
+        let offTime = calendar.date(from: DateComponents(hour: Int(offHour), minute: Int(offMin))) ?? Date()
+        let onTime = calendar.date(from: DateComponents(hour: Int(onHour), minute: Int(onMin))) ?? Date()
+
+        DispatchQueue.main.async {
+            self.sleepSchedule = SleepSchedule(
+                enabled: enabled,
+                offTime: offTime,
+                onTime: onTime,
+                isSleeping: self.sleepSchedule.isSleeping
+            )
+        }
+
+        print("🌙 Setting sleep schedule: off \(offHour):\(offMin), on \(onHour):\(onMin), enabled: \(enabled)")
     }
 
     /// Send a complete frame
@@ -341,6 +357,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
         availableGames = []
         deviceCapabilities = nil
         powerLimitAmps = 80.0
+        sleepSchedule = .defaultSchedule
     }
 }
 

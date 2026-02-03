@@ -55,13 +55,39 @@ struct PowerLimit: Codable {
 
 /// Sleep schedule configuration
 struct SleepSchedule: Codable {
-    let offTime: String  // "HH:MM" format
-    let onTime: String   // "HH:MM" format
-    let enabled: Bool
+    var enabled: Bool
+    var offTime: Date      // Store as Date for DatePicker compatibility
+    var onTime: Date       // Store as Date for DatePicker compatibility
+    var isSleeping: Bool   // Read-only status from backend
 
-    enum CodingKeys: String, CodingKey {
-        case offTime = "off_time"
-        case onTime = "on_time"
-        case enabled
+    // Helper computed properties to extract hour/minute components
+    var offHour: UInt8 {
+        UInt8(Calendar.current.component(.hour, from: offTime))
+    }
+
+    var offMinute: UInt8 {
+        UInt8(Calendar.current.component(.minute, from: offTime))
+    }
+
+    var onHour: UInt8 {
+        UInt8(Calendar.current.component(.hour, from: onTime))
+    }
+
+    var onMinute: UInt8 {
+        UInt8(Calendar.current.component(.minute, from: onTime))
+    }
+
+    /// Default schedule: Off at 11pm, on at 7am, disabled
+    static var defaultSchedule: SleepSchedule {
+        let calendar = Calendar.current
+        let offTime = calendar.date(from: DateComponents(hour: 23, minute: 0)) ?? Date()
+        let onTime = calendar.date(from: DateComponents(hour: 7, minute: 0)) ?? Date()
+
+        return SleepSchedule(
+            enabled: false,
+            offTime: offTime,
+            onTime: onTime,
+            isSleeping: false
+        )
     }
 }

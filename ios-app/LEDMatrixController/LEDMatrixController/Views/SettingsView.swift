@@ -69,6 +69,9 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
 
+            // Sleep Schedule Section
+            SleepScheduleSettingsSection(bluetoothManager: bluetoothManager)
+
             // Display Info Section
             Section("Display Information") {
                 if let config = bluetoothManager.displayConfig {

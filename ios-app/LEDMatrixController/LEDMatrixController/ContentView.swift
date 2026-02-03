@@ -27,6 +27,13 @@ struct ContentView: View {
             }
 
             NavigationView {
+                CameraView(bluetoothManager: bluetoothManager)
+            }
+            .tabItem {
+                Label("Camera", systemImage: "camera.fill")
+            }
+
+            NavigationView {
                 SettingsView(bluetoothManager: bluetoothManager)
             }
             .tabItem {

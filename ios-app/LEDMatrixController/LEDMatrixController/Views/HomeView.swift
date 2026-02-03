@@ -211,6 +211,17 @@ struct QuickActionsCard: View {
                 QuickActionButton(icon: "gamecontroller.fill", title: "Snake", color: .green) {
                     bluetoothManager.startGame(0)  // Snake game
                 }
+
+                QuickActionButton(icon: "moon.fill", title: "Sleep", color: .indigo) {
+                    let schedule = bluetoothManager.sleepSchedule
+                    bluetoothManager.setSleepSchedule(
+                        offHour: schedule.offHour,
+                        offMin: schedule.offMinute,
+                        onHour: schedule.onHour,
+                        onMin: schedule.onMinute,
+                        enabled: !schedule.enabled  // Toggle enabled state
+                    )
+                }
             }
         }
         .padding()
