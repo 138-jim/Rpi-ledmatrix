@@ -319,7 +319,7 @@ No need to restart the service.
 - WS2812B LEDs draw up to 60mA per LED at full white
 - 4× 16×16 panels = 1024 LEDs = 61.4A theoretical max
 - Power limiter (enabled by default) reduces brightness to stay within PSU limits
-- Default limit: 8.5A (configurable via API)
+- Default limit: 80A (configurable via API)
 
 ### Troubleshooting
 

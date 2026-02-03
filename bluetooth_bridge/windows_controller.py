@@ -216,12 +216,25 @@ class LEDMatrixController:
         logger.info(f"Available patterns: {pattern_data['count']} patterns")
         return pattern_data
 
+    async def get_game_list(self) -> Optional[dict]:
+        """Read available games from device"""
+        if not self.client or not self.client.is_connected:
+            logger.error("Not connected")
+            return None
+
+        import json
+        data = await self.client.read_gatt_char(protocol.CHAR_GAME_LIST_UUID)
+        game_data = json.loads(data.decode('utf-8'))
+        logger.info(f"Available games: {game_data['count']} games")
+        return game_data
+
 
 async def interactive_menu(controller: LEDMatrixController):
     """Interactive menu for controlling the LED matrix"""
 
-    # Cache for dynamically loaded patterns
+    # Cache for dynamically loaded data
     dynamic_patterns = None
+    dynamic_games = None
 
     while True:
         print("\n" + "="*50)
@@ -237,6 +250,8 @@ async def interactive_menu(controller: LEDMatrixController):
         print("8. Get Config")
         print("9. List Available Patterns (from device)")
         print("10. List Available Patterns (local)")
+        print("11. List Available Games (from device)")
+        print("12. List Available Games (local)")
         print("0. Exit")
         print("="*50)
 
@@ -263,7 +278,19 @@ async def interactive_menu(controller: LEDMatrixController):
                 await controller.set_pattern(pattern)
 
             elif choice == "3":
-                print(f"Available games: {', '.join(protocol.GAMES)}")
+                # Fetch games from device if not cached
+                if dynamic_games is None:
+                    print("Fetching available games from device...")
+                    dynamic_games = await controller.get_game_list()
+
+                if dynamic_games:
+                    print("\nAvailable Games (from device):")
+                    for i, game in enumerate(dynamic_games['games']):
+                        print(f"  {i}: {game}")
+                    print()
+                else:
+                    print(f"Available games: {', '.join(protocol.GAMES)}")
+
                 game = input("Enter game name: ").strip()
                 await controller.start_game(game)
 
@@ -300,6 +327,20 @@ async def interactive_menu(controller: LEDMatrixController):
                 print("\nAvailable Patterns (local):")
                 for i, pattern in enumerate(protocol.PATTERNS):
                     print(f"  {i}: {pattern}")
+
+            elif choice == "11":
+                print("Fetching available games from device...")
+                dynamic_games = await controller.get_game_list()
+                if dynamic_games:
+                    print("\nAvailable Games (from device):")
+                    print(f"Total: {dynamic_games['count']} games\n")
+                    for i, game in enumerate(dynamic_games['games']):
+                        print(f"  {i}: {game}")
+
+            elif choice == "12":
+                print("\nAvailable Games (local):")
+                for i, game in enumerate(protocol.GAMES):
+                    print(f"  {i}: {game}")
 
             elif choice == "0":
                 print("Exiting...")

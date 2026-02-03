@@ -63,6 +63,25 @@ struct Game: Identifiable {
     static func game(named name: String) -> Game? {
         allGames.first { $0.name == name }
     }
+
+    /// Create dynamic games from device game list
+    static func createDynamicGames(from gameNames: [String]) -> [Game] {
+        gameNames.enumerated().map { index, name in
+            // Try to match with existing game for metadata
+            if let existing = allGames.first(where: { $0.name == name }) {
+                return existing
+            } else {
+                // Create new game with generic info
+                return Game(
+                    id: index,
+                    name: name,
+                    displayName: name.capitalized,
+                    description: "Play \(name)",
+                    icon: "gamecontroller"  // Default icon for unknown games
+                )
+            }
+        }
+    }
 }
 
 /// Game state information

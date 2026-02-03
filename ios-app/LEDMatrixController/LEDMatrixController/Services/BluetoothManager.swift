@@ -21,6 +21,7 @@ class BluetoothManager: NSObject, ObservableObject {
     @Published var displayConfig: LEDDisplayConfig?
     @Published var connectionError: String?
     @Published var availablePatterns: [String] = []
+    @Published var availableGames: [String] = []
 
     // MARK: - Private Properties
 
@@ -37,6 +38,7 @@ class BluetoothManager: NSObject, ObservableObject {
     private var sleepScheduleCharacteristic: CBCharacteristic?
     private var frameStreamCharacteristic: CBCharacteristic?
     private var patternListCharacteristic: CBCharacteristic?
+    private var gameListCharacteristic: CBCharacteristic?
 
     // Command queue for reliable delivery
     private var commandQueue: [(Data, CBCharacteristic)] = []
@@ -202,6 +204,15 @@ class BluetoothManager: NSObject, ObservableObject {
         print("📋 Requesting pattern list from device...")
     }
 
+    /// Request game list from device
+    func requestGameList() {
+        guard let characteristic = gameListCharacteristic,
+              let peripheral = connectedPeripheral else { return }
+
+        peripheral.readValue(for: characteristic)
+        print("🎮 Requesting game list from device...")
+    }
+
     // MARK: - Private Methods
 
     private func writeValue(_ data: Data, to characteristic: CBCharacteristic) {
@@ -310,9 +321,11 @@ extension BluetoothManager: CBCentralManagerDelegate {
         sleepScheduleCharacteristic = nil
         frameStreamCharacteristic = nil
         patternListCharacteristic = nil
+        gameListCharacteristic = nil
 
         // Clear dynamic data
         availablePatterns = []
+        availableGames = []
     }
 }
 
@@ -375,6 +388,10 @@ extension BluetoothManager: CBPeripheralDelegate {
                 patternListCharacteristic = characteristic
                 // Read pattern list once on connection
                 peripheral.readValue(for: characteristic)
+            case BLEProtocol.gameListUUID:
+                gameListCharacteristic = characteristic
+                // Read game list once on connection
+                peripheral.readValue(for: characteristic)
             default:
                 break
             }
@@ -435,6 +452,22 @@ extension BluetoothManager: CBPeripheralDelegate {
                     print("📋 Available patterns: \(patternList.patterns.joined(separator: ", "))")
                 } catch {
                     print("❌ Failed to parse pattern list: \(error)")
+                }
+            }
+
+        case BLEProtocol.gameListUUID:
+            // Parse game list JSON
+            if let jsonString = String(data: data, encoding: .utf8),
+               let jsonData = jsonString.data(using: .utf8) {
+                do {
+                    let gameList = try JSONDecoder().decode(GameListResponse.self, from: jsonData)
+                    DispatchQueue.main.async {
+                        self.availableGames = gameList.games
+                    }
+                    print("✅ Game list loaded: \(gameList.count) games")
+                    print("🎮 Available games: \(gameList.games.joined(separator: ", "))")
+                } catch {
+                    print("❌ Failed to parse game list: \(error)")
                 }
             }
 

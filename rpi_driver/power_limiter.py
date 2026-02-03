@@ -30,7 +30,7 @@ class PowerLimiter:
 
     def __init__(self,
                  led_count: int,
-                 max_current_amps: float = 8.5,
+                 max_current_amps: float = 80.0,
                  enabled: bool = True,
                  dynamic_mode: bool = False):
         """
