@@ -7,6 +7,7 @@
 
 import AVFoundation
 import UIKit
+import Combine
 
 class CameraManager: NSObject, ObservableObject {
 
@@ -106,10 +107,14 @@ class CameraManager: NSObject, ObservableObject {
             throw CameraError.cannotAddOutput
         }
 
-        // Set video orientation
+        // Set video orientation (iOS 17+ uses rotation angle instead)
         if let connection = videoOutput.connection(with: .video) {
-            if connection.isVideoOrientationSupported {
-                connection.videoOrientation = .portrait
+            if #available(iOS 17.0, *) {
+                connection.videoRotationAngle = 0  // Portrait
+            } else {
+                if connection.isVideoOrientationSupported {
+                    connection.videoOrientation = .portrait
+                }
             }
         }
 

@@ -244,7 +244,7 @@ class BluetoothManager: NSObject, ObservableObject {
     // MARK: - Private Methods
 
     private func writeValue(_ data: Data, to characteristic: CBCharacteristic) {
-        guard let peripheral = connectedPeripheral else { return }
+        guard connectedPeripheral != nil else { return }
 
         // Add to queue
         commandQueue.append((data, characteristic))
