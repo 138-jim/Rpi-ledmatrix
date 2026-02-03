@@ -34,7 +34,7 @@ class DisplayController:
                  config_reload_event: threading.Event,
                  config_path: str,
                  target_fps: int = 30,
-                 power_limit_amps: float = 8.5,
+                 power_limit_amps: float = 80.0,
                  power_limit_enabled: bool = True,
                  power_limit_dynamic: bool = False):
         """

@@ -93,6 +93,8 @@ struct BrightnessControl: View {
     @Binding var brightness: Double
     let onChange: (Double) -> Void
 
+    @State private var debounceWorkItem: DispatchWorkItem?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -106,7 +108,17 @@ struct BrightnessControl: View {
 
             Slider(value: $brightness, in: 0...255, step: 1)
                 .onChange(of: brightness) { oldValue, newValue in
-                    onChange(newValue)
+                    // Cancel previous debounce timer
+                    debounceWorkItem?.cancel()
+
+                    // Create new debounce timer
+                    let workItem = DispatchWorkItem {
+                        onChange(newValue)
+                    }
+                    debounceWorkItem = workItem
+
+                    // Execute after 150ms delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
                 }
         }
         .padding()
