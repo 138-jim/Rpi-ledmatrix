@@ -268,6 +268,18 @@ class LEDMatrixBLEServer:
             flags=['read'],
             read_callback=self.on_game_list_read
         )
+        char_id += 1
+
+        # Capabilities characteristic (read)
+        self.peripheral.add_characteristic(
+            srv_id=self.srv_id,
+            chr_id=char_id,
+            uuid=protocol.CHAR_CAPABILITIES_UUID,
+            value=[],
+            notifying=False,
+            flags=['read'],
+            read_callback=self.on_capabilities_read
+        )
 
         logger.info("GATT services and characteristics configured")
 
@@ -502,6 +514,16 @@ class LEDMatrixBLEServer:
             return list(game_list_json.encode('utf-8'))
         except Exception as e:
             logger.error(f"Error getting game list: {e}")
+            return []
+
+    def on_capabilities_read(self):
+        """Handle capabilities read request"""
+        try:
+            capabilities_json = protocol.get_capabilities_json()
+            logger.info("Sending device capabilities")
+            return list(capabilities_json.encode('utf-8'))
+        except Exception as e:
+            logger.error(f"Error getting capabilities: {e}")
             return []
 
     def start(self):

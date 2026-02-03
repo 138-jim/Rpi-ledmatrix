@@ -25,6 +25,7 @@ struct BLEProtocol {
     static let frameStreamUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdef8")
     static let patternListUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdef9")
     static let gameListUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdefa")
+    static let capabilitiesUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdeff")
 
     // MARK: - Pattern Names (indices 0-36)
 
@@ -91,4 +92,25 @@ struct PatternListResponse: Codable {
 struct GameListResponse: Codable {
     let games: [String]
     let count: Int
+}
+
+/// Device capabilities response
+struct DeviceCapabilities: Codable {
+    let hasGames: Bool
+    let hasPatterns: Bool
+    let hasFrameStreaming: Bool
+    let hasPowerLimiter: Bool
+    let hasSleepScheduler: Bool
+    let hasBrightnessControl: Bool
+    let firmwareVersion: String
+
+    enum CodingKeys: String, CodingKey {
+        case hasGames = "has_games"
+        case hasPatterns = "has_patterns"
+        case hasFrameStreaming = "has_frame_streaming"
+        case hasPowerLimiter = "has_power_limiter"
+        case hasSleepScheduler = "has_sleep_scheduler"
+        case hasBrightnessControl = "has_brightness_control"
+        case firmwareVersion = "firmware_version"
+    }
 }

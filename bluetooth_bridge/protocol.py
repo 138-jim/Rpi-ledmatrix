@@ -19,6 +19,7 @@ CHAR_SLEEP_SCHEDULE_UUID = "12345678-1234-5678-1234-56789abcdef7"
 CHAR_FRAME_STREAM_UUID = "12345678-1234-5678-1234-56789abcdef8"
 CHAR_PATTERN_LIST_UUID = "12345678-1234-5678-1234-56789abcdef9"
 CHAR_GAME_LIST_UUID = "12345678-1234-5678-1234-56789abcdefa"
+CHAR_CAPABILITIES_UUID = "12345678-1234-5678-1234-56789abcdeff"
 
 # Pattern indices (0-36 for 37 patterns)
 PATTERNS = [
@@ -106,6 +107,19 @@ def get_game_list_json() -> str:
     return json.dumps({
         "games": GAMES,
         "count": len(GAMES)
+    })
+
+def get_capabilities_json() -> str:
+    """Get device capabilities as JSON string"""
+    import json
+    return json.dumps({
+        "has_games": True,
+        "has_patterns": True,
+        "has_frame_streaming": True,
+        "has_power_limiter": True,
+        "has_sleep_scheduler": True,
+        "has_brightness_control": True,
+        "firmware_version": "1.0.0"
     })
 
 # Frame streaming constants

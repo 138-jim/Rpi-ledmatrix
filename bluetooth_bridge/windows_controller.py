@@ -228,6 +228,18 @@ class LEDMatrixController:
         logger.info(f"Available games: {game_data['count']} games")
         return game_data
 
+    async def get_capabilities(self) -> Optional[dict]:
+        """Read device capabilities"""
+        if not self.client or not self.client.is_connected:
+            logger.error("Not connected")
+            return None
+
+        import json
+        data = await self.client.read_gatt_char(protocol.CHAR_CAPABILITIES_UUID)
+        capabilities = json.loads(data.decode('utf-8'))
+        logger.info(f"Device capabilities: firmware {capabilities['firmware_version']}")
+        return capabilities
+
 
 async def interactive_menu(controller: LEDMatrixController):
     """Interactive menu for controlling the LED matrix"""
@@ -252,6 +264,7 @@ async def interactive_menu(controller: LEDMatrixController):
         print("10. List Available Patterns (local)")
         print("11. List Available Games (from device)")
         print("12. List Available Games (local)")
+        print("13. Get Device Capabilities")
         print("0. Exit")
         print("="*50)
 
@@ -341,6 +354,22 @@ async def interactive_menu(controller: LEDMatrixController):
                 print("\nAvailable Games (local):")
                 for i, game in enumerate(protocol.GAMES):
                     print(f"  {i}: {game}")
+
+            elif choice == "13":
+                print("Fetching device capabilities...")
+                capabilities = await controller.get_capabilities()
+                if capabilities:
+                    print("\n" + "="*50)
+                    print("Device Capabilities")
+                    print("="*50)
+                    print(f"Firmware Version: {capabilities['firmware_version']}")
+                    print(f"Has Games: {capabilities['has_games']}")
+                    print(f"Has Patterns: {capabilities['has_patterns']}")
+                    print(f"Has Frame Streaming: {capabilities['has_frame_streaming']}")
+                    print(f"Has Power Limiter: {capabilities['has_power_limiter']}")
+                    print(f"Has Sleep Scheduler: {capabilities['has_sleep_scheduler']}")
+                    print(f"Has Brightness Control: {capabilities['has_brightness_control']}")
+                    print("="*50)
 
             elif choice == "0":
                 print("Exiting...")

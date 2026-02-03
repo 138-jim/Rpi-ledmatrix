@@ -22,6 +22,7 @@ class BluetoothManager: NSObject, ObservableObject {
     @Published var connectionError: String?
     @Published var availablePatterns: [String] = []
     @Published var availableGames: [String] = []
+    @Published var deviceCapabilities: DeviceCapabilities?
 
     // MARK: - Private Properties
 
@@ -39,6 +40,7 @@ class BluetoothManager: NSObject, ObservableObject {
     private var frameStreamCharacteristic: CBCharacteristic?
     private var patternListCharacteristic: CBCharacteristic?
     private var gameListCharacteristic: CBCharacteristic?
+    private var capabilitiesCharacteristic: CBCharacteristic?
 
     // Command queue for reliable delivery
     private var commandQueue: [(Data, CBCharacteristic)] = []
@@ -322,10 +324,12 @@ extension BluetoothManager: CBCentralManagerDelegate {
         frameStreamCharacteristic = nil
         patternListCharacteristic = nil
         gameListCharacteristic = nil
+        capabilitiesCharacteristic = nil
 
         // Clear dynamic data
         availablePatterns = []
         availableGames = []
+        deviceCapabilities = nil
     }
 }
 
@@ -391,6 +395,10 @@ extension BluetoothManager: CBPeripheralDelegate {
             case BLEProtocol.gameListUUID:
                 gameListCharacteristic = characteristic
                 // Read game list once on connection
+                peripheral.readValue(for: characteristic)
+            case BLEProtocol.capabilitiesUUID:
+                capabilitiesCharacteristic = characteristic
+                // Read capabilities once on connection
                 peripheral.readValue(for: characteristic)
             default:
                 break
@@ -468,6 +476,28 @@ extension BluetoothManager: CBPeripheralDelegate {
                     print("🎮 Available games: \(gameList.games.joined(separator: ", "))")
                 } catch {
                     print("❌ Failed to parse game list: \(error)")
+                }
+            }
+
+        case BLEProtocol.capabilitiesUUID:
+            // Parse capabilities JSON
+            if let jsonString = String(data: data, encoding: .utf8),
+               let jsonData = jsonString.data(using: .utf8) {
+                do {
+                    let capabilities = try JSONDecoder().decode(DeviceCapabilities.self, from: jsonData)
+                    DispatchQueue.main.async {
+                        self.deviceCapabilities = capabilities
+                    }
+                    print("✅ Device capabilities loaded:")
+                    print("   - Firmware: \(capabilities.firmwareVersion)")
+                    print("   - Games: \(capabilities.hasGames)")
+                    print("   - Patterns: \(capabilities.hasPatterns)")
+                    print("   - Frame Streaming: \(capabilities.hasFrameStreaming)")
+                    print("   - Power Limiter: \(capabilities.hasPowerLimiter)")
+                    print("   - Sleep Scheduler: \(capabilities.hasSleepScheduler)")
+                    print("   - Brightness Control: \(capabilities.hasBrightnessControl)")
+                } catch {
+                    print("❌ Failed to parse capabilities: \(error)")
                 }
             }
 
