@@ -244,6 +244,18 @@ class LEDMatrixBLEServer:
             flags=['write', 'write-without-response'],
             write_callback=self.on_frame_stream_write
         )
+        char_id += 1
+
+        # Pattern List characteristic (read)
+        self.peripheral.add_characteristic(
+            srv_id=self.srv_id,
+            chr_id=char_id,
+            uuid=protocol.CHAR_PATTERN_LIST_UUID,
+            value=[],
+            notifying=False,
+            flags=['read'],
+            read_callback=self.on_pattern_list_read
+        )
 
         logger.info("GATT services and characteristics configured")
 
@@ -458,6 +470,16 @@ class LEDMatrixBLEServer:
                 return []
         except Exception as e:
             logger.error(f"Error getting config: {e}")
+            return []
+
+    def on_pattern_list_read(self):
+        """Handle pattern list read request"""
+        try:
+            pattern_list_json = protocol.get_pattern_list_json()
+            logger.info(f"Sending pattern list: {len(protocol.PATTERNS)} patterns")
+            return list(pattern_list_json.encode('utf-8'))
+        except Exception as e:
+            logger.error(f"Error getting pattern list: {e}")
             return []
 
     def start(self):

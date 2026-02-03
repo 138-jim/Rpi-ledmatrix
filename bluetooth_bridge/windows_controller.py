@@ -204,9 +204,24 @@ class LEDMatrixController:
         logger.info(f"Config: {config}")
         return config
 
+    async def get_pattern_list(self) -> Optional[dict]:
+        """Read available patterns from device"""
+        if not self.client or not self.client.is_connected:
+            logger.error("Not connected")
+            return None
+
+        import json
+        data = await self.client.read_gatt_char(protocol.CHAR_PATTERN_LIST_UUID)
+        pattern_data = json.loads(data.decode('utf-8'))
+        logger.info(f"Available patterns: {pattern_data['count']} patterns")
+        return pattern_data
+
 
 async def interactive_menu(controller: LEDMatrixController):
     """Interactive menu for controlling the LED matrix"""
+
+    # Cache for dynamically loaded patterns
+    dynamic_patterns = None
 
     while True:
         print("\n" + "="*50)
@@ -220,7 +235,8 @@ async def interactive_menu(controller: LEDMatrixController):
         print("6. Set Sleep Schedule")
         print("7. Get Status")
         print("8. Get Config")
-        print("9. List Available Patterns")
+        print("9. List Available Patterns (from device)")
+        print("10. List Available Patterns (local)")
         print("0. Exit")
         print("="*50)
 
@@ -232,6 +248,17 @@ async def interactive_menu(controller: LEDMatrixController):
                 await controller.set_brightness(brightness)
 
             elif choice == "2":
+                # Fetch patterns from device if not cached
+                if dynamic_patterns is None:
+                    print("Fetching available patterns from device...")
+                    dynamic_patterns = await controller.get_pattern_list()
+
+                if dynamic_patterns:
+                    print("\nAvailable Patterns (from device):")
+                    for i, pattern in enumerate(dynamic_patterns['patterns']):
+                        print(f"  {i}: {pattern}")
+                    print()
+
                 pattern = input(f"Enter pattern name: ").strip()
                 await controller.set_pattern(pattern)
 
@@ -261,7 +288,16 @@ async def interactive_menu(controller: LEDMatrixController):
                 await controller.get_config()
 
             elif choice == "9":
-                print("\nAvailable Patterns:")
+                print("Fetching available patterns from device...")
+                dynamic_patterns = await controller.get_pattern_list()
+                if dynamic_patterns:
+                    print("\nAvailable Patterns (from device):")
+                    print(f"Total: {dynamic_patterns['count']} patterns\n")
+                    for i, pattern in enumerate(dynamic_patterns['patterns']):
+                        print(f"  {i}: {pattern}")
+
+            elif choice == "10":
+                print("\nAvailable Patterns (local):")
                 for i, pattern in enumerate(protocol.PATTERNS):
                     print(f"  {i}: {pattern}")
 

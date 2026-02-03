@@ -17,6 +17,7 @@ CHAR_CONFIG_UUID = "12345678-1234-5678-1234-56789abcdef5"
 CHAR_POWER_LIMIT_UUID = "12345678-1234-5678-1234-56789abcdef6"
 CHAR_SLEEP_SCHEDULE_UUID = "12345678-1234-5678-1234-56789abcdef7"
 CHAR_FRAME_STREAM_UUID = "12345678-1234-5678-1234-56789abcdef8"
+CHAR_PATTERN_LIST_UUID = "12345678-1234-5678-1234-56789abcdef9"
 
 # Pattern indices (0-36 for 37 patterns)
 PATTERNS = [
@@ -89,6 +90,22 @@ def get_action_name(index: int) -> str:
     if 0 <= index < len(ACTIONS):
         return ACTIONS[index]
     return None
+
+def get_pattern_list_json() -> str:
+    """Get pattern list as JSON string"""
+    import json
+    return json.dumps({
+        "patterns": PATTERNS,
+        "count": len(PATTERNS)
+    })
+
+def get_game_list_json() -> str:
+    """Get game list as JSON string"""
+    import json
+    return json.dumps({
+        "games": GAMES,
+        "count": len(GAMES)
+    })
 
 # Frame streaming constants
 MAX_CHUNK_SIZE = 500  # Maximum bytes per BLE write

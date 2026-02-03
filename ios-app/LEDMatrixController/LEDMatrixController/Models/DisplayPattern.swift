@@ -94,4 +94,27 @@ struct DisplayPattern: Identifiable {
     static var categorized: [PatternCategory: [DisplayPattern]] {
         Dictionary(grouping: allPatterns, by: { $0.category })
     }
+
+    /// Create dynamic patterns from device pattern list
+    static func createDynamicPatterns(from patternNames: [String]) -> [DisplayPattern] {
+        patternNames.enumerated().map { index, name in
+            // Try to match with existing pattern for category and description
+            if let existing = allPatterns.first(where: { $0.name == name }) {
+                return existing
+            } else {
+                // Create new pattern with generic category
+                return DisplayPattern(
+                    id: index,
+                    name: name,
+                    category: .animated,  // Default category for unknown patterns
+                    description: name.replacingOccurrences(of: "_", with: " ").capitalized
+                )
+            }
+        }
+    }
+
+    /// Create categorized dictionary from dynamic patterns
+    static func categorizeDynamic(_ patterns: [DisplayPattern]) -> [PatternCategory: [DisplayPattern]] {
+        Dictionary(grouping: patterns, by: { $0.category })
+    }
 }

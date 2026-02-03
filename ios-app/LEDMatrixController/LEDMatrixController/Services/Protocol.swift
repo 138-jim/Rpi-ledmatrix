@@ -23,6 +23,7 @@ struct BLEProtocol {
     static let powerLimitUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdef6")
     static let sleepScheduleUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdef7")
     static let frameStreamUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdef8")
+    static let patternListUUID = CBUUID(string: "12345678-1234-5678-1234-56789abcdef9")
 
     // MARK: - Pattern Names (indices 0-36)
 
@@ -77,4 +78,10 @@ enum GameAction: UInt8 {
     case reset = 5
     case pause = 6
     case resume = 7
+}
+
+/// Pattern list response from device
+struct PatternListResponse: Codable {
+    let patterns: [String]
+    let count: Int
 }
