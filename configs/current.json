@@ -13,32 +13,32 @@
       "id": 0,
       "rotation": 0,
       "position": [
-        0,
+        1,
         0
       ]
     },
     {
       "id": 1,
-      "rotation": 0,
+      "rotation": 90,
       "position": [
         1,
-        0
+        1
       ]
     },
     {
       "id": 2,
-      "rotation": 180,
+      "rotation": 270,
       "position": [
-        1,
+        0,
         1
       ]
     },
     {
       "id": 3,
-      "rotation": 180,
+      "rotation": 270,
       "position": [
         0,
-        1
+        0
       ]
     }
   ]
