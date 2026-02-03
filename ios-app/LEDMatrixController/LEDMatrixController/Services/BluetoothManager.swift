@@ -23,6 +23,7 @@ class BluetoothManager: NSObject, ObservableObject {
     @Published var availablePatterns: [String] = []
     @Published var availableGames: [String] = []
     @Published var deviceCapabilities: DeviceCapabilities?
+    @Published var powerLimitAmps: Float = 80.0
 
     // MARK: - Private Properties
 
@@ -215,6 +216,15 @@ class BluetoothManager: NSObject, ObservableObject {
         print("🎮 Requesting game list from device...")
     }
 
+    /// Request current power limit from device
+    func requestPowerLimit() {
+        guard let characteristic = powerLimitCharacteristic,
+              let peripheral = connectedPeripheral else { return }
+
+        peripheral.readValue(for: characteristic)
+        print("⚡️ Requesting power limit from device...")
+    }
+
     // MARK: - Private Methods
 
     private func writeValue(_ data: Data, to characteristic: CBCharacteristic) {
@@ -330,6 +340,7 @@ extension BluetoothManager: CBCentralManagerDelegate {
         availablePatterns = []
         availableGames = []
         deviceCapabilities = nil
+        powerLimitAmps = 80.0
     }
 }
 
@@ -384,6 +395,8 @@ extension BluetoothManager: CBPeripheralDelegate {
                 peripheral.readValue(for: characteristic)
             case BLEProtocol.powerLimitUUID:
                 powerLimitCharacteristic = characteristic
+                // Read power limit once on connection
+                peripheral.readValue(for: characteristic)
             case BLEProtocol.sleepScheduleUUID:
                 sleepScheduleCharacteristic = characteristic
             case BLEProtocol.frameStreamUUID:
@@ -499,6 +512,19 @@ extension BluetoothManager: CBPeripheralDelegate {
                 } catch {
                     print("❌ Failed to parse capabilities: \(error)")
                 }
+            }
+
+        case BLEProtocol.powerLimitUUID:
+            // Parse power limit (2 bytes, big-endian, in 0.1A units)
+            if data.count == 2 {
+                let powerUnits = data.withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+                let powerAmps = Float(powerUnits) / 10.0
+                DispatchQueue.main.async {
+                    self.powerLimitAmps = powerAmps
+                }
+                print("✅ Power limit loaded: \(powerAmps)A")
+            } else {
+                print("❌ Invalid power limit data length: \(data.count)")
             }
 
         default:

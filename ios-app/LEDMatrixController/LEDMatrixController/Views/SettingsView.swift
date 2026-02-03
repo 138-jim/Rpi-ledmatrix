@@ -9,7 +9,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var bluetoothManager: BluetoothManager
-    @State private var powerLimit: Double = 8.5
+    @State private var powerLimit: Double = 80.0
+    @State private var debounceWorkItem: DispatchWorkItem?
 
     var body: some View {
         Form {
@@ -47,13 +48,23 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Slider(value: $powerLimit, in: 1...15, step: 0.5)
+                Slider(value: $powerLimit, in: 1...100, step: 0.5)
                     .onChange(of: powerLimit) { oldValue, newValue in
-                        bluetoothManager.setPowerLimit(amps: Float(newValue))
+                        // Cancel previous debounce timer
+                        debounceWorkItem?.cancel()
+
+                        // Create new debounce timer
+                        let workItem = DispatchWorkItem {
+                            bluetoothManager.setPowerLimit(amps: Float(newValue))
+                        }
+                        debounceWorkItem = workItem
+
+                        // Execute after 150ms delay
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
                     }
                     .disabled(!bluetoothManager.isConnected)
 
-                Text("Adjust maximum current draw for LED display")
+                Text("Adjust maximum current draw for LED display (1-100A)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -133,6 +144,14 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .onAppear {
+            // Sync slider with current power limit from device
+            powerLimit = Double(bluetoothManager.powerLimitAmps)
+        }
+        .onChange(of: bluetoothManager.powerLimitAmps) { oldValue, newValue in
+            // Update slider when device power limit changes
+            powerLimit = Double(newValue)
+        }
     }
 }
 

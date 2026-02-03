@@ -210,14 +210,15 @@ class LEDMatrixBLEServer:
         )
         char_id += 1
 
-        # Power Limit characteristic (write)
+        # Power Limit characteristic (read/write)
         self.peripheral.add_characteristic(
             srv_id=self.srv_id,
             chr_id=char_id,
             uuid=protocol.CHAR_POWER_LIMIT_UUID,
             value=[],
             notifying=False,
-            flags=['write', 'write-without-response'],
+            flags=['read', 'write', 'write-without-response'],
+            read_callback=self.on_power_limit_read,
             write_callback=self.on_power_limit_write
         )
         char_id += 1
@@ -386,6 +387,25 @@ class LEDMatrixBLEServer:
                     logger.error(f"Failed to send game input: {response.status_code}")
             except Exception as e:
                 logger.error(f"Error sending game input: {e}")
+
+    def on_power_limit_read(self):
+        """Handle power limit read"""
+        try:
+            response = requests.get(f"{self.api_url}/power-limit", timeout=2)
+            if response.status_code == 200:
+                data = response.json()
+                # Convert amps to 0.1A units (2 bytes, big-endian)
+                power_amps = data.get('max_current_amps', 80.0)
+                power_units = int(power_amps * 10.0)
+                return list(struct.pack('>H', power_units))
+            else:
+                logger.error(f"Failed to read power limit: {response.status_code}")
+                # Return default 80A
+                return list(struct.pack('>H', 800))
+        except Exception as e:
+            logger.error(f"Error reading power limit: {e}")
+            # Return default 80A
+            return list(struct.pack('>H', 800))
 
     def on_power_limit_write(self, value, options):
         """Handle power limit write"""

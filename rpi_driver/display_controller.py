@@ -183,8 +183,8 @@ class DisplayController:
                 current_brightness
             )
 
-            # Apply limited brightness if needed
-            if was_limited:
+            # Always apply the safe brightness (may be same as current, or adjusted)
+            if safe_brightness != current_brightness:
                 self.led_driver.set_brightness(safe_brightness)
 
             # Send to LED driver
