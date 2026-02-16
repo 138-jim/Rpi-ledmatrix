@@ -27,16 +27,21 @@ class CameraManager: NSObject, ObservableObject {
     private var frameCallback: ((Data) -> Void)?
     private var lastFrameTime = Date()
     private var frameCount = 0
+    private var isSetup = false
 
     // MARK: - Configuration
 
     private let targetSize = CGSize(width: 32, height: 32)
-    private let targetFPS: Double = 15  // Limit to 15 FPS to avoid overwhelming BLE
+    private let targetFPS: Double = 2  // Limit to 2 FPS to avoid overwhelming BLE (was 5, still too fast)
     private let minFrameInterval: TimeInterval
 
     override init() {
         self.minFrameInterval = 1.0 / targetFPS
         super.init()
+    }
+
+    deinit {
+        stopStreaming()
     }
 
     // MARK: - Public Methods
@@ -73,6 +78,11 @@ class CameraManager: NSObject, ObservableObject {
     func setupCamera() throws {
         guard permissionGranted else {
             throw CameraError.permissionDenied
+        }
+
+        // Skip if already setup
+        guard !isSetup else {
+            return
         }
 
         // Configure session for lower quality (we only need 32x32)
@@ -119,6 +129,7 @@ class CameraManager: NSObject, ObservableObject {
         }
 
         captureSession.commitConfiguration()
+        isSetup = true
     }
 
     /// Start camera streaming
@@ -143,14 +154,18 @@ class CameraManager: NSObject, ObservableObject {
 
     /// Stop camera streaming
     func stopStreaming() {
+        frameCallback = nil
+
         if captureSession.isRunning {
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.captureSession.stopRunning()
+                guard let self = self else { return }
+                self.captureSession.stopRunning()
                 DispatchQueue.main.async {
-                    self?.isStreaming = false
-                    self?.frameCallback = nil
+                    self.isStreaming = false
                 }
             }
+        } else {
+            isStreaming = false
         }
     }
 

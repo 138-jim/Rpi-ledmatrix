@@ -34,6 +34,20 @@ struct ContentView: View {
             }
 
             NavigationView {
+                DrawingView(bluetoothManager: bluetoothManager)
+            }
+            .tabItem {
+                Label("Draw", systemImage: "pencil.tip.crop.circle.fill")
+            }
+
+            NavigationView {
+                SystemMonitorView(bluetoothManager: bluetoothManager)
+            }
+            .tabItem {
+                Label("Monitor", systemImage: "chart.xyaxis.line")
+            }
+
+            NavigationView {
                 SettingsView(bluetoothManager: bluetoothManager)
             }
             .tabItem {

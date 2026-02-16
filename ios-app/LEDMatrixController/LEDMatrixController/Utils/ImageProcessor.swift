@@ -25,13 +25,64 @@ struct ImageProcessor {
         return extractRGBData(from: resizedImage)
     }
 
-    /// Resize image to target size
-    private static func resize(_ image: UIImage, to size: CGSize) -> UIImage? {
-        UIGraphicsBeginImageContextWithOptions(size, false, 1.0)
-        defer { UIGraphicsEndImageContext() }
+    /// Rotate image by specified degrees
+    /// - Parameters:
+    ///   - image: Source image
+    ///   - degrees: Rotation angle (0, 90, 180, 270)
+    /// - Returns: Rotated image
+    private static func rotate(_ image: UIImage, degrees: CGFloat) -> UIImage? {
+        guard let cgImage = image.cgImage else { return nil }
 
-        image.draw(in: CGRect(origin: .zero, size: size))
-        return UIGraphicsGetImageFromCurrentImageContext()
+        let radians = degrees * .pi / 180
+        let rotatedSize: CGSize
+
+        // Swap width/height for 90 and 270 degree rotations
+        if degrees == 90 || degrees == 270 {
+            rotatedSize = CGSize(width: image.size.height, height: image.size.width)
+        } else {
+            rotatedSize = image.size
+        }
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = false
+
+        let renderer = UIGraphicsImageRenderer(size: rotatedSize, format: format)
+
+        let rotatedImage = renderer.image { context in
+            // Move origin to center
+            context.cgContext.translateBy(x: rotatedSize.width / 2, y: rotatedSize.height / 2)
+            // Rotate
+            context.cgContext.rotate(by: radians)
+            // Move origin back and draw
+            context.cgContext.translateBy(x: -image.size.width / 2, y: -image.size.height / 2)
+            context.cgContext.draw(cgImage, in: CGRect(origin: .zero, size: image.size))
+        }
+
+        return rotatedImage
+    }
+
+    /// Resize image to target size with proper orientation handling
+    private static func resize(_ image: UIImage, to size: CGSize) -> UIImage? {
+        // Create a new image with the correct orientation
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = false
+
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+
+        let resizedImage = renderer.image { context in
+            // Flip the context to handle UIKit's coordinate system
+            context.cgContext.translateBy(x: 0, y: size.height)
+            context.cgContext.scaleBy(x: 1, y: -1)
+
+            // Draw the image with proper orientation
+            if let cgImage = image.cgImage {
+                context.cgContext.draw(cgImage, in: CGRect(origin: .zero, size: size))
+            }
+        }
+
+        return resizedImage
     }
 
     /// Extract raw RGB data from image
@@ -40,14 +91,14 @@ struct ImageProcessor {
 
         let width = cgImage.width
         let height = cgImage.height
-        let bytesPerPixel = 3
+        let bytesPerPixel = 4  // RGBA
         let bytesPerRow = bytesPerPixel * width
         let bitsPerComponent = 8
 
-        // Create buffer for RGB data
-        var rgbData = Data(count: width * height * bytesPerPixel)
+        // Create buffer for RGBA data (we'll strip alpha later)
+        var pixelData = Data(count: width * height * bytesPerPixel)
 
-        rgbData.withUnsafeMutableBytes { ptr in
+        pixelData.withUnsafeMutableBytes { ptr in
             guard let context = CGContext(
                 data: ptr.baseAddress,
                 width: width,
@@ -55,10 +106,29 @@ struct ImageProcessor {
                 bitsPerComponent: bitsPerComponent,
                 bytesPerRow: bytesPerRow,
                 space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.none.rawValue
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             ) else { return }
 
             context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+
+        // Convert RGBA to RGB by stripping alpha channel
+        var rgbData = Data(count: width * height * 3)
+        pixelData.withUnsafeBytes { rgba in
+            guard let rgbaPtr = rgba.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+
+            rgbData.withUnsafeMutableBytes { rgb in
+                guard let rgbPtr = rgb.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+
+                for i in 0..<(width * height) {
+                    let rgbaOffset = i * 4
+                    let rgbOffset = i * 3
+                    rgbPtr[rgbOffset + 0] = rgbaPtr[rgbaOffset + 0]  // R
+                    rgbPtr[rgbOffset + 1] = rgbaPtr[rgbaOffset + 1]  // G
+                    rgbPtr[rgbOffset + 2] = rgbaPtr[rgbaOffset + 2]  // B
+                    // Skip alpha channel
+                }
+            }
         }
 
         return rgbData

@@ -2952,6 +2952,23 @@ def starry_night(width: int, height: int, offset: float = 0) -> np.ndarray:
     return frame
 
 
+# Static image storage for displaying photos as a pattern
+_static_image = None
+
+
+def set_static_image(frame: np.ndarray) -> None:
+    """Store a frame to be displayed by the static_image pattern"""
+    global _static_image
+    _static_image = frame.copy()
+
+
+def static_image(width: int, height: int, offset: float) -> np.ndarray:
+    """Return the stored static image, or black if none set"""
+    if _static_image is not None:
+        return _static_image
+    return np.zeros((height, width, 3), dtype=np.uint8)
+
+
 # Pattern registry for easy access
 PATTERNS = {
     "red": lambda w, h, o: solid_color(w, h, 255, 0, 0),
@@ -2991,6 +3008,7 @@ PATTERNS = {
     "lava_lamp": lava_lamp,
     "dna_helix": dna_helix,
     "fireworks": fireworks,
+    "static_image": static_image,
 }
 
 

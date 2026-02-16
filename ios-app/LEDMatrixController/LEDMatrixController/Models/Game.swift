@@ -22,7 +22,7 @@ struct Game: Identifiable {
             name: "snake",
             displayName: "Snake",
             description: "Classic snake game - eat, grow, avoid walls",
-            icon: "snake"
+            icon: "scribble"
         ),
         Game(
             id: 1,

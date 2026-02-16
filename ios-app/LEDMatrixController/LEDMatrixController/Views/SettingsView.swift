@@ -75,6 +75,18 @@ struct SettingsView: View {
             // Display Info Section
             Section("Display Information") {
                 if let config = bluetoothManager.displayConfig {
+                    NavigationLink(destination: PanelConfigView(bluetoothManager: bluetoothManager)) {
+                        HStack {
+                            Image(systemName: "square.grid.2x2")
+                                .foregroundColor(.blue)
+                            Text("Panel Configuration")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
                     HStack {
                         Text("Resolution")
                         Spacer()

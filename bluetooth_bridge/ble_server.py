@@ -315,6 +315,23 @@ class LEDMatrixBLEServer:
             return
 
         pattern_index = value[0]
+
+        # 0xFF means stop current pattern
+        if pattern_index == 0xFF:
+            logger.info("Stopping current pattern")
+            try:
+                response = requests.post(
+                    f"{self.api_url}/stop-pattern",
+                    timeout=2
+                )
+                if response.status_code == 200:
+                    logger.info("Pattern stopped successfully")
+                else:
+                    logger.error(f"Failed to stop pattern: {response.status_code}")
+            except Exception as e:
+                logger.error(f"Error stopping pattern: {e}")
+            return
+
         pattern_name = protocol.get_pattern_name(pattern_index)
 
         if not pattern_name:
@@ -476,7 +493,7 @@ class LEDMatrixBLEServer:
 
             try:
                 response = requests.post(
-                    f"{self.api_url}/frame",
+                    f"{self.api_url}/display-image",
                     data=frame_data,
                     headers={'Content-Type': 'application/octet-stream'},
                     timeout=2

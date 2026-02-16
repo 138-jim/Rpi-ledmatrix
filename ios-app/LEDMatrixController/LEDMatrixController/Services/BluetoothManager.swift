@@ -122,6 +122,15 @@ class BluetoothManager: NSObject, ObservableObject {
         }
     }
 
+    /// Stop any running pattern (sends 0xFF to pattern characteristic)
+    func stopPattern() {
+        guard let characteristic = patternCharacteristic else { return }
+
+        let data = Data([0xFF])
+        writeValue(data, to: characteristic)
+        print("⏹ Stopping current pattern")
+    }
+
     /// Start a game
     func startGame(_ gameIndex: UInt8) {
         guard let characteristic = gameControlCharacteristic else { return }

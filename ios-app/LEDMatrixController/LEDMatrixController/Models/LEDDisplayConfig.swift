@@ -44,7 +44,7 @@ struct GridConfig: Codable {
 }
 
 /// Individual panel configuration
-struct Panel: Codable {
+struct Panel: Codable, Identifiable {
     let id: Int
     let rotation: Int  // 0, 90, 180, or 270 degrees
     let position: [Int]  // [x, y] in grid coordinates

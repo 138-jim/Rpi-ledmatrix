@@ -461,6 +461,38 @@ class WebAPIServer:
                 logger.error(f"Error submitting frame: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
+        # Display image endpoint (stores as static_image pattern)
+        @self.app.post("/api/display-image")
+        async def display_image(request: Request):
+            """Display a static image via the pattern generator (preserves brightness control)"""
+            try:
+                data = await request.body()
+                width, height = self.mapper.get_dimensions()
+
+                is_valid, error_msg = validate_frame_data(data, width, height)
+                if not is_valid:
+                    raise HTTPException(status_code=400, detail=error_msg)
+
+                frame = bytes_to_frame(data, width, height)
+
+                # Store the image for the static_image pattern
+                test_patterns.set_static_image(frame)
+
+                # If pattern generator isn't already running static_image, start it
+                if self.pattern_generator.get_current_pattern() != "static_image":
+                    self.pattern_generator.stop()
+                    self.simulation_generator.stop()
+                    self.game_controller.stop()
+                    self.pattern_generator.start("static_image")
+
+                return {"status": "success", "message": "Image displayed"}
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error displaying image: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
         # Brightness control
         @self.app.post("/api/brightness")
         async def set_brightness(update: BrightnessUpdate):
